@@ -1798,7 +1798,7 @@ function App() {
  <>
       <header className="topbar">
         <div>
-          <h1>서핑고</h1>
+          <h1>서프레디</h1>
         </div>
       </header>
 
