@@ -842,6 +842,114 @@
  gap: 1rem;
 }
 
+.detail-live-cam-card {
+ display: flex;
+ flex-direction: column;
+ gap: 0.9rem;
+ padding: 1.2rem;
+}
+
+.detail-live-cam-header {
+ display: flex;
+ align-items: flex-start;
+ justify-content: space-between;
+ gap: 1rem;
+}
+
+.detail-live-cam-title {
+ margin: 0.25rem 0 0;
+ font-size: 1.2rem;
+}
+
+.detail-live-cam-chip {
+ flex-shrink: 0;
+ padding: 0.45rem 0.8rem;
+ border: 1px solid var(--line);
+ border-radius: 999px;
+ background: rgba(255, 255, 255, 0.72);
+ font-size: 0.78rem;
+ font-weight: 600;
+ color: var(--muted);
+}
+
+.detail-live-cam-frame {
+ overflow: hidden;
+ border: 1px solid var(--line);
+ border-radius: 1rem;
+ background: rgba(10, 18, 30, 0.92);
+ aspect-ratio: 16 / 9;
+}
+
+.detail-live-cam-frame iframe {
+ width: 100%;
+ height: 100%;
+ border: 0;
+}
+
+.detail-live-cam-fallback {
+ padding: 1rem;
+ border: 1px dashed var(--line);
+ border-radius: 1rem;
+ background: rgba(255, 255, 255, 0.56);
+}
+
+.detail-live-cam-fallback strong,
+.detail-live-cam-fallback p {
+ margin: 0;
+}
+
+.detail-live-cam-fallback p {
+ margin-top: 0.35rem;
+ color: var(--muted);
+}
+
+.detail-live-cam-meta {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 0.5rem;
+ color: var(--muted);
+ font-size: 0.82rem;
+}
+
+.detail-live-cam-meta span {
+ padding: 0.35rem 0.65rem;
+ border-radius: 999px;
+ background: rgba(255, 255, 255, 0.7);
+ border: 1px solid var(--line);
+}
+
+.detail-live-cam-note {
+ margin: 0;
+ line-height: 1.5;
+ color: var(--muted);
+}
+
+.detail-live-cam-actions {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 0.65rem;
+}
+
+.detail-live-cam-button {
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ min-height: 2.75rem;
+ padding: 0.7rem 1rem;
+ border-radius: 999px;
+ border: 1px solid var(--line);
+ background: rgba(255, 255, 255, 0.72);
+ color: var(--text);
+ text-decoration: none;
+ font-weight: 600;
+}
+
+.detail-live-cam-button.primary {
+ border-color: transparent;
+ background: var(--accent);
+ color: white;
+}
+
 .nearby-place-list {
  display: flex;
  flex-direction: column;
