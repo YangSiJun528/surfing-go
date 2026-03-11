@@ -77,7 +77,6 @@ type WaveReadingEntry = {
 }
 
 const DAY_RANGE = 7
-const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
 const weatherTypes: WeatherType[] = ['sunny', 'cloudy', 'windy', 'rainy']
 const mapCenter: LatLngExpression = [36.2, 127.9]
 const koreaMaxBounds: LatLngBoundsExpression = [
@@ -94,12 +93,6 @@ const levelLabel: Record<SurfLevel, string> = {
   fair: '보통',
   poor: '주의',
   flat: '비추천',
-}
-
-const skillLabel: Record<SkillLevel, string> = {
-  beginner: '초급',
-  intermediate: '중급',
-  advanced: '상급',
 }
 
 const markerLegend = [
@@ -1330,7 +1323,6 @@ function App() {
   const serviceKey = getSurfingApiKey()
  const [screenMode, setScreenMode] = useState<ScreenMode>("dashboard")
   const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
-  const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [selectedDate, setSelectedDate] = useState(today)
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
@@ -1688,22 +1680,6 @@ function App() {
                   waveHeight={selectedSpot.current.waveHeight}
                   wavePeriod={selectedSpot.current.wavePeriod}
                 />
-              </div>
-              <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
-                {skillLevels.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={selectedSkill === level ? 'is-selected' : ''}
-                    onClick={() => setSelectedSkill(level)}
-                  >
-                    {skillLabel[level]}
-                  </button>
-                ))}
-              </div>
-              <div className="narrative-card">
-                <span className="label">{relativeDateLabel}의 해석</span>
-                <p>{selectedSpot.skillNotes[selectedSkill]}</p>
               </div>
               <div className="narrative-card">
                 <span className="label">오늘의 파도 읽기</span>
