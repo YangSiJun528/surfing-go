@@ -1377,16 +1377,12 @@ function SpotDetailPage({
  baseSpot,
  apiItems,
  southKoreaGeoJson,
- relativeDateLabel,
- absoluteDateLabel,
  onBack,
 }: {
  spot: ResolvedSpot
  baseSpot: SpotBase
  apiItems: SurfingApiItem[]
  southKoreaGeoJson: Feature<Geometry, { name?: string }> | null
- relativeDateLabel: string
- absoluteDateLabel: string
  onBack: () => void
 }) {
  const [activeTab, setActiveTab] = useState<DetailTab>('weekly-forecast')
@@ -1423,13 +1419,6 @@ function SpotDetailPage({
  <button type="button" className="detail-back-button" onClick={onBack}>
  뒤로 가기
  </button>
- <div className="detail-page-meta">
- <div className="meta-pill">
- <span className="meta-label">선택 날짜</span>
- <strong>{absoluteDateLabel}</strong>
- <span>{relativeDateLabel}</span>
- </div>
- </div>
  </section>
 
  <section className="section-card detail-hero-card">
@@ -1684,7 +1673,6 @@ function App() {
 
   const selectedDateOffset = diffCalendarDays(selectedDate, today)
   const relativeDateLabel = formatRelativeDateLabel(selectedDate)
-  const absoluteDateLabel = formatAbsoluteDate(selectedDate)
 
   const resolvedSpots = useMemo(
     () =>
@@ -1804,8 +1792,6 @@ function App() {
  baseSpot={baseSpots.find((s) => s.id === selectedSpotId) ?? baseSpots[0]}
  apiItems={apiItems}
  southKoreaGeoJson={southKoreaGeoJson}
- relativeDateLabel={relativeDateLabel}
- absoluteDateLabel={absoluteDateLabel}
  onBack={handleCloseSpotDetail}
  />
  ) : (
