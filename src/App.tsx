@@ -21,7 +21,12 @@ type LocalCard = {
   distance: string
   description: string
   tag: string
+  lat: number
+  lng: number
+  googleMapsUrl: string
 }
+
+type LocalCardSeed = Omit<LocalCard, 'lat' | 'lng' | 'googleMapsUrl'>
 
 type SpotCurrent = {
   waveHeight: number
@@ -91,7 +96,7 @@ const skillLabel: Record<SkillLevel, string> = {
   advanced: '상급',
 }
 
-const baseSpots: SpotBase[] = [
+const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCardSeed[] }> = [
   {
     id: 'SR1',
     name: '송정해수욕장',
@@ -310,6 +315,36 @@ const baseSpots: SpotBase[] = [
     specialInfo: ['파도 에너지 강함', '자신감 있는 라이더에게 적합', '시각적으로 가장 화려함', '관광객 교통 고려'],
   },
 ]
+
+const localPickOffsets = [
+  { lat: 0.0014, lng: 0.0012 },
+  { lat: -0.0011, lng: 0.0015 },
+  { lat: 0.0018, lng: -0.0013 },
+] as const
+
+function buildGoogleMapsUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+}
+
+function buildLocalPickLocation(baseLat: number, baseLng: number, index: number) {
+  const offset = localPickOffsets[index % localPickOffsets.length]
+  const lat = Number((baseLat + offset.lat).toFixed(6))
+  const lng = Number((baseLng + offset.lng).toFixed(6))
+
+  return {
+    lat,
+    lng,
+    googleMapsUrl: buildGoogleMapsUrl(lat, lng),
+  }
+}
+
+const baseSpots: SpotBase[] = rawBaseSpots.map((spot) => ({
+  ...spot,
+  localPicks: spot.localPicks.map((place, index) => ({
+    ...place,
+    ...buildLocalPickLocation(spot.lat, spot.lng, index),
+  })),
+}))
 
 function levelClass(level: SurfLevel) {
   return level
