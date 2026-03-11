@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import type { Feature } from 'geojson'
+import type { Feature, Geometry } from 'geojson'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { divIcon } from 'leaflet'
 import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
@@ -7,10 +7,10 @@ import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
 import {
-  buildSpotApiRuntimeMap,
   getSurfingApiKey,
   loadSurfingForecastData,
   type SkillLevel,
+  type SurfingApiItem,
   type SurfLevel,
   type WeatherType,
 } from './lib/surfing'
@@ -23,7 +23,16 @@ type LocalCard = {
   tag: string
 }
 
-type Spot = {
+type SpotCurrent = {
+  waveHeight: number
+  wavePeriod: number
+  windSpeed: number
+  waterTemp: number
+  weatherLabel: string
+  recommendedTime: string
+}
+
+type SpotBase = {
   id: string
   name: string
   region: string
@@ -34,29 +43,39 @@ type Spot = {
   heroWeather: WeatherType
   summary: string
   spotlight: string
-  current: {
-    waveHeight: number
-    wavePeriod: number
-    windSpeed: number
-    waterTemp: number
-    weatherLabel: string
-    recommendedTime: string
-  }
+  current: SpotCurrent
   skillNotes: Record<SkillLevel, string>
   localPicks: LocalCard[]
   specialInfo: string[]
 }
 
-type MarkerNode =
-  | { kind: 'spot'; spot: Spot }
-  | { kind: 'cluster'; id: string; spots: Spot[]; lat: number; lng: number; label: string }
+type SpotSnapshot = {
+  currentLevel: SurfLevel
+  heroWeather: WeatherType
+  summary: string
+  spotlight: string
+  current: SpotCurrent
+  skillNotes: Record<SkillLevel, string>
+}
 
+type ResolvedSpot = Omit<SpotBase, 'currentLevel' | 'heroWeather' | 'summary' | 'spotlight' | 'current' | 'skillNotes'> &
+  SpotSnapshot
+
+type MarkerNode =
+  | { kind: 'spot'; spot: ResolvedSpot }
+  | { kind: 'cluster'; id: string; spots: ResolvedSpot[]; lat: number; lng: number; label: string }
+
+const DAY_RANGE = 7
 const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
+const weatherTypes: WeatherType[] = ['sunny', 'cloudy', 'windy', 'rainy']
 const mapCenter: LatLngExpression = [36.2, 127.9]
 const koreaMaxBounds: LatLngBoundsExpression = [
   [32.2, 123.8],
   [39.5, 132.0],
 ]
+const weekdayFormatter = new Intl.DateTimeFormat('ko-KR', { weekday: 'short' })
+const forecastDateFormatter = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' })
+const today = startOfDay(new Date())
 
 const levelLabel: Record<SurfLevel, string> = {
   'very-good': '매우 좋음',
@@ -66,31 +85,13 @@ const levelLabel: Record<SurfLevel, string> = {
   flat: '비추천',
 }
 
-const weatherLabel: Record<WeatherType, string> = {
-  sunny: '맑음',
-  cloudy: '흐림',
-  rainy: '비',
-  windy: '강풍',
-}
-
 const skillLabel: Record<SkillLevel, string> = {
   beginner: '초급',
   intermediate: '중급',
   advanced: '상급',
 }
 
-const todayFormatter = new Intl.DateTimeFormat('ko-KR', {
-  month: 'long',
-  day: 'numeric',
-  weekday: 'short',
-})
-
-const forecastDateFormatter = new Intl.DateTimeFormat('ko-KR', {
-  month: 'long',
-  day: 'numeric',
-})
-
-const demoSpots: Spot[] = [
+const baseSpots: SpotBase[] = [
   {
     id: 'SR1',
     name: '송정해수욕장',
@@ -333,7 +334,324 @@ function markerColor(level: SurfLevel) {
   }
 }
 
-function SelectedSpotController({ spot }: { spot: Spot }) {
+function startOfDay(value: Date) {
+  const next = new Date(value)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function addDays(value: Date, days: number) {
+  const next = new Date(value)
+  next.setDate(next.getDate() + days)
+  return startOfDay(next)
+}
+
+function diffCalendarDays(left: Date, right: Date) {
+  return Math.round((startOfDay(left).getTime() - startOfDay(right).getTime()) / 86400000)
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function formatAbsoluteDate(value: Date) {
+  return `${pad2(value.getMonth() + 1)}월 ${pad2(value.getDate())}일`
+}
+
+function formatDateWithWeekday(value: Date) {
+  return `${formatAbsoluteDate(value)} (${weekdayFormatter.format(value)})`
+}
+
+function formatRelativeDateLabel(value: Date) {
+  const offset = diffCalendarDays(value, today)
+
+  switch (offset) {
+    case -2:
+      return '그제'
+    case -1:
+      return '어제'
+    case 0:
+      return '오늘'
+    case 1:
+      return '내일'
+    case 2:
+      return '모레'
+    default:
+      return offset < 0 ? `${Math.abs(offset)}일 전` : `${offset}일 후`
+  }
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function mod(value: number, divisor: number) {
+  return ((value % divisor) + divisor) % divisor
+}
+
+function shiftLevel(level: SurfLevel, amount: number) {
+  const order: SurfLevel[] = ['flat', 'poor', 'fair', 'good', 'very-good']
+  const index = order.indexOf(level)
+  return order[clamp(index + amount, 0, order.length - 1)]
+}
+
+function replaceTodayLanguage(text: string, relativeLabel: string) {
+  return text.replaceAll('오늘은', `${relativeLabel}은`).replaceAll('오늘', relativeLabel)
+}
+
+function buildWeatherLabel(weather: WeatherType, windSpeed: number) {
+  switch (weather) {
+    case 'sunny':
+      return windSpeed >= 6 ? '햇빛은 좋지만 바람이 조금 살아 있어요' : '햇빛과 시야가 모두 안정적이에요'
+    case 'cloudy':
+      return windSpeed >= 6 ? '구름이 많고 수면이 조금 흔들립니다' : '구름은 있지만 시야는 무난해요'
+    case 'windy':
+      return windSpeed >= 7 ? '바람이 빠르게 강해져 면이 거칠 수 있어요' : '간헐적인 바람이 들어와 수면이 흔들립니다'
+    case 'rainy':
+      return windSpeed >= 6 ? '비와 바람이 겹쳐 체감 난도가 높아요' : '가벼운 비가 지나가며 시야가 차분합니다'
+  }
+}
+
+function shiftTimeRange(timeRange: string, amount: number) {
+  if (!timeRange.includes('-')) {
+    return timeRange
+  }
+
+  const parts = timeRange.split(' - ')
+  if (parts.length !== 2) {
+    return timeRange
+  }
+
+  const shifted = parts.map((part) => {
+    const [hoursText, minutesText] = part.split(':')
+    const hours = Number(hoursText)
+    const minutes = Number(minutesText)
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return part
+    }
+
+    const totalMinutes = clamp(hours * 60 + minutes + amount * 30, 360, 1260)
+    const shiftedHours = Math.floor(totalMinutes / 60)
+    const shiftedMinutes = totalMinutes % 60
+    return `${pad2(shiftedHours)}:${pad2(shiftedMinutes)}`
+  })
+
+  return `${shifted[0]} - ${shifted[1]}`
+}
+
+function buildSummary(level: SurfLevel, relativeLabel: string) {
+  switch (level) {
+    case 'very-good':
+      return `${relativeLabel} 바로 입수 우선순위로 볼 만한 안정적인 포인트입니다.`
+    case 'good':
+      return `${relativeLabel} 체크 우선순위가 높은 균형 좋은 포인트입니다.`
+    case 'fair':
+      return `${relativeLabel} 시간대 선택을 잘하면 무난한 세션이 가능합니다.`
+    case 'poor':
+      return `${relativeLabel} 현장 체크 후 입수 여부를 판단하는 편이 안전합니다.`
+    case 'flat':
+      return `${relativeLabel} 실제 입수보다는 대체 플랜을 우선 고려하는 편이 낫습니다.`
+  }
+}
+
+function buildSpotlight(level: SurfLevel, weather: WeatherType) {
+  switch (level) {
+    case 'very-good':
+      return weather === 'sunny' ? '라인 정돈과 시야가 같이 좋아 메인 카드로 보기 좋습니다.' : '조건이 받쳐줘서 세션 만족도가 높게 나올 가능성이 큽니다.'
+    case 'good':
+      return '무리하지 않고 움직이면 실속 있는 세션으로 이어지기 좋습니다.'
+    case 'fair':
+      return '피크와 시간대를 고르면 체감 품질을 꽤 끌어올릴 수 있습니다.'
+    case 'poor':
+      return '바람과 면 상태를 먼저 확인하고 짧게 가져가는 편이 맞습니다.'
+    case 'flat':
+      return '체크 후 바로 플랜 B로 전환할 가능성까지 같이 보는 편이 좋습니다.'
+  }
+}
+
+function buildSkillNotes(level: SurfLevel, baseNotes: Record<SkillLevel, string>, relativeLabel: string) {
+  return {
+    beginner:
+      level === 'poor' || level === 'flat'
+        ? `${relativeLabel}는 초급자 기준으로 안전한 대체 포인트를 같이 보는 편이 좋습니다.`
+        : `${relativeLabel}는 ${replaceTodayLanguage(baseNotes.beginner, relativeLabel)}`
+          .replace(`${relativeLabel}는 ${relativeLabel}`, relativeLabel),
+    intermediate:
+      level === 'flat'
+        ? `${relativeLabel}는 라인업 훈련보다 이동 판단이 더 중요한 날입니다.`
+        : `${relativeLabel}는 ${replaceTodayLanguage(baseNotes.intermediate, relativeLabel)}`
+          .replace(`${relativeLabel}는 ${relativeLabel}`, relativeLabel),
+    advanced:
+      level === 'very-good'
+        ? `${relativeLabel}는 강한 세션을 노릴 만한 포인트예요.`
+        : `${relativeLabel}는 ${replaceTodayLanguage(baseNotes.advanced, relativeLabel)}`
+          .replace(`${relativeLabel}는 ${relativeLabel}`, relativeLabel),
+  }
+}
+
+function buildMockSpotSnapshot(spot: SpotBase, date: Date, spotIndex: number): SpotSnapshot {
+  const relativeLabel = formatRelativeDateLabel(date)
+  const dayOffset = diffCalendarDays(date, today)
+  const phase = mod(dayOffset + spotIndex * 2, 5) - 2
+  const levelSwing = phase === 0 ? 0 : phase > 0 ? 1 : -1
+  const level = shiftLevel(spot.currentLevel, levelSwing)
+  const windBump = mod(dayOffset + spotIndex, 4) === 0 ? 1.2 : 0
+  const waveHeight = Number(clamp(spot.current.waveHeight + levelSwing * 0.18 + dayOffset * 0.03, 0.4, 2.3).toFixed(1))
+  const wavePeriod = Number(clamp(spot.current.wavePeriod + levelSwing * 0.35 + mod(dayOffset - spotIndex, 3) * 0.15, 4.8, 10.4).toFixed(1))
+  const windSpeed = Number(clamp(spot.current.windSpeed + Math.abs(dayOffset) * 0.18 + windBump - (level === 'very-good' ? 0.7 : 0), 2.2, 9.8).toFixed(1))
+  const waterTemp = Number(clamp(spot.current.waterTemp + dayOffset * 0.08, 9.0, 18.5).toFixed(1))
+  const weatherShift = mod(weatherTypes.indexOf(spot.heroWeather) + dayOffset + spotIndex, weatherTypes.length)
+  const heroWeather = windSpeed >= 7.2 ? 'windy' : level === 'flat' && weatherShift !== 0 ? 'rainy' : weatherTypes[weatherShift]
+  const recommendedTime = level === 'flat' || level === 'poor' ? '관망 추천' : shiftTimeRange(spot.current.recommendedTime, phase)
+
+  return {
+    currentLevel: level,
+    heroWeather,
+    summary: buildSummary(level, relativeLabel),
+    spotlight: buildSpotlight(level, heroWeather),
+    current: {
+      waveHeight,
+      wavePeriod,
+      windSpeed,
+      waterTemp,
+      weatherLabel: buildWeatherLabel(heroWeather, windSpeed),
+      recommendedTime,
+    },
+    skillNotes: buildSkillNotes(level, spot.skillNotes, relativeLabel),
+  }
+}
+
+function apiIndexToLevel(index: SurfingApiItem['totalIndex']): SurfLevel {
+  switch (index) {
+    case '매우좋음':
+      return 'very-good'
+    case '좋음':
+      return 'good'
+    case '보통':
+      return 'fair'
+    case '나쁨':
+      return 'poor'
+    case '매우나쁨':
+      return 'flat'
+  }
+}
+
+function apiIndexScore(index: SurfingApiItem['totalIndex']) {
+  switch (index) {
+    case '매우좋음':
+      return 5
+    case '좋음':
+      return 4
+    case '보통':
+      return 3
+    case '나쁨':
+      return 2
+    case '매우나쁨':
+      return 1
+  }
+}
+
+function noonOrder(value: SurfingApiItem['predcNoonSeCd']) {
+  switch (value) {
+    case '오전':
+      return 0
+    case '오후':
+      return 1
+    case '일':
+      return 2
+    default:
+      return 99
+  }
+}
+
+function compareApiItems(a: SurfingApiItem, b: SurfingApiItem) {
+  const indexDiff = apiIndexScore(b.totalIndex) - apiIndexScore(a.totalIndex)
+  if (indexDiff !== 0) {
+    return indexDiff
+  }
+
+  const noonDiff = noonOrder(a.predcNoonSeCd) - noonOrder(b.predcNoonSeCd)
+  if (noonDiff !== 0) {
+    return noonDiff
+  }
+
+  const windDiff = a.avgWspd - b.avgWspd
+  if (windDiff !== 0) {
+    return windDiff
+  }
+
+  return b.avgWvpd - a.avgWvpd
+}
+
+function pickBestApiItem(items: SurfingApiItem[], grade: SurfingApiItem['grdCn']) {
+  return items.filter((item) => item.grdCn === grade).sort(compareApiItems)[0]
+}
+
+function deriveApiWeather(item: SurfingApiItem): WeatherType {
+  if (item.avgWspd >= 7) {
+    return 'windy'
+  }
+  if (item.totalIndex === '매우좋음' || item.totalIndex === '좋음') {
+    return 'sunny'
+  }
+  if (item.totalIndex === '매우나쁨') {
+    return 'rainy'
+  }
+  return 'cloudy'
+}
+
+function buildApiSkillNote(items: SurfingApiItem[], skillLevel: SkillLevel) {
+  const grade = skillLevel === 'beginner' ? '초급' : skillLevel === 'intermediate' ? '중급' : '상급'
+  const picked = pickBestApiItem(items, grade)
+
+  if (!picked) {
+    return '예보 데이터가 아직 정리되지 않았습니다.'
+  }
+
+  return `${picked.predcNoonSeCd} 기준 ${picked.totalIndex} 컨디션입니다. 파고 ${picked.avgWvhgt.toFixed(1)}m, 파주기 ${picked.avgWvpd.toFixed(1)}초, 풍속 ${picked.avgWspd.toFixed(1)}m/s입니다.`
+}
+
+function buildApiSpotSnapshot(spot: SpotBase, date: Date, items: SurfingApiItem[]): SpotSnapshot | null {
+  const targetDate = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+  const targetItems = items.filter((item) => item.surfPlcNm === spot.name && item.predcYmd === targetDate)
+  const picked = pickBestApiItem(targetItems, '초급')
+
+  if (!picked) {
+    return null
+  }
+
+  const level = apiIndexToLevel(picked.totalIndex)
+  const weather = deriveApiWeather(picked)
+  const relativeLabel = formatRelativeDateLabel(date)
+
+  return {
+    currentLevel: level,
+    heroWeather: weather,
+    summary: buildSummary(level, relativeLabel),
+    spotlight: buildSpotlight(level, weather),
+    current: {
+      waveHeight: picked.avgWvhgt,
+      wavePeriod: picked.avgWvpd,
+      windSpeed: picked.avgWspd,
+      waterTemp: picked.avgWtem,
+      weatherLabel: `${picked.predcNoonSeCd} 기준 ${picked.totalIndex} 컨디션이에요`,
+      recommendedTime:
+        picked.totalIndex === '매우나쁨' || picked.totalIndex === '나쁨'
+          ? '관망 추천'
+          : picked.predcNoonSeCd === '일'
+            ? '하루 종일 체크'
+            : `${picked.predcNoonSeCd} 추천`,
+    },
+    skillNotes: {
+      beginner: buildApiSkillNote(targetItems, 'beginner'),
+      intermediate: buildApiSkillNote(targetItems, 'intermediate'),
+      advanced: buildApiSkillNote(targetItems, 'advanced'),
+    },
+  }
+}
+
+function SelectedSpotController({ spot }: { spot: ResolvedSpot }) {
   const map = useMap()
 
   useEffect(() => {
@@ -412,7 +730,7 @@ function markerRadius(level: SurfLevel, active: boolean) {
   return active ? base + 3 : base
 }
 
-function buildMarkerNodes(spots: Spot[], zoom: number): MarkerNode[] {
+function buildMarkerNodes(spots: ResolvedSpot[], zoom: number): MarkerNode[] {
   if (zoom > 7) {
     return spots.map((spot) => ({ kind: 'spot', spot }))
   }
@@ -435,45 +753,40 @@ function buildMarkerNodes(spots: Spot[], zoom: number): MarkerNode[] {
   return clusters
 }
 
-function mergeSpotsWithApi(spots: Spot[], data: Awaited<ReturnType<typeof loadSurfingForecastData>>) {
-  if (!data) {
-    return spots
-  }
-
-  const runtimeMap = buildSpotApiRuntimeMap(data.items)
-  return spots.map((spot) => {
-    const runtime = runtimeMap.get(spot.name)
-    if (!runtime) {
-      return spot
-    }
-
-    return {
-      ...spot,
-      currentLevel: runtime.currentLevel,
-      heroWeather: runtime.heroWeather,
-      current: runtime.current,
-      skillNotes: runtime.skillNotes,
-    }
-  })
-}
-
 function App() {
   const serviceKey = getSurfingApiKey()
-  const [spots, setSpots] = useState<Spot[]>(demoSpots)
-  const [selectedSpotId, setSelectedSpotId] = useState(demoSpots[0].id)
+  const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
   const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
+  const [selectedDate, setSelectedDate] = useState(today)
   const [mapZoom, setMapZoom] = useState(7)
-  const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature | null>(null)
+  const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
+  const [apiItems, setApiItems] = useState<SurfingApiItem[]>([])
   const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
   const [dataSource, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
   const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
   const [forecastDate, setForecastDate] = useState<string | null>(null)
 
-  const selectedSpot = useMemo(
-    () => spots.find((spot) => spot.id === selectedSpotId) ?? spots[0],
-    [selectedSpotId, spots],
+  const selectedDateOffset = diffCalendarDays(selectedDate, today)
+  const relativeDateLabel = formatRelativeDateLabel(selectedDate)
+  const absoluteDateLabel = formatAbsoluteDate(selectedDate)
+
+  const resolvedSpots = useMemo(
+    () =>
+      baseSpots.map((spot, index) => {
+        const apiSnapshot = buildApiSpotSnapshot(spot, selectedDate, apiItems)
+        return {
+          ...spot,
+          ...(apiSnapshot ?? buildMockSpotSnapshot(spot, selectedDate, index)),
+        }
+      }),
+    [apiItems, selectedDate],
   )
-  const markerNodes = useMemo(() => buildMarkerNodes(spots, mapZoom), [mapZoom, spots])
+  const selectedSpot = useMemo(
+    () => resolvedSpots.find((spot) => spot.id === selectedSpotId) ?? resolvedSpots[0],
+    [resolvedSpots, selectedSpotId],
+  )
+  const selectedSpotIndex = resolvedSpots.findIndex((spot) => spot.id === selectedSpot.id)
+  const markerNodes = useMemo(() => buildMarkerNodes(resolvedSpots, mapZoom), [resolvedSpots, mapZoom])
 
   const mapStyle = {
     '--focus-x': `${selectedSpot.lng > 128 ? 70 : selectedSpot.lng < 127 ? 28 : 54}%`,
@@ -487,6 +800,20 @@ function App() {
     })
   }
 
+  const handleDateChange = (direction: -1 | 1) => {
+    const nextOffset = selectedDateOffset + direction
+    if (nextOffset < -DAY_RANGE || nextOffset > DAY_RANGE) {
+      return
+    }
+
+    setSelectedDate(addDays(today, nextOffset))
+  }
+
+  const handleSpotStep = (direction: -1 | 1) => {
+    const nextIndex = mod(selectedSpotIndex + direction, resolvedSpots.length)
+    handleSpotSelect(resolvedSpots[nextIndex].id)
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -494,7 +821,7 @@ function App() {
       .then((response) => response.json())
       .then((atlas) => {
         const collection = topojsonFeature(atlas, atlas.objects.countries) as unknown as {
-          features: Feature[]
+          features: Array<Feature<Geometry, { name?: string }> & { id: string }>
         }
         const southKorea = collection.features.find((feature) => feature.id === '410')
         if (!cancelled && southKorea) {
@@ -522,21 +849,18 @@ function App() {
           return
         }
 
-        setSpots(mergeSpotsWithApi(demoSpots, result))
+        setApiItems(result.items)
         setDataStatus('ready')
         setDataSource(result.source)
         setForecastDate(result.items[0]?.predcYmd ?? null)
-        setDataMessage(
-          result.source === 'cache'
-            ? '저장된 API 응답을 재사용했습니다.'
-            : '실시간 API 응답을 반영했습니다.',
-        )
+        setDataMessage(result.source === 'cache' ? '저장된 API 응답을 재사용했습니다.' : '실시간 API 응답을 반영했습니다.')
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return
         }
 
+        setApiItems([])
         setDataStatus('fallback')
         setDataSource('demo')
         setForecastDate(null)
@@ -548,11 +872,8 @@ function App() {
     }
   }, [serviceKey])
 
-  const sourceLabel =
-    dataSource === 'network' ? '실시간 API' : dataSource === 'cache' ? '저장된 응답' : '데모 데이터'
-  const forecastLabel = forecastDate
-    ? forecastDateFormatter.format(new Date(`${forecastDate}T00:00:00`))
-    : todayFormatter.format(new Date())
+  const sourceLabel = dataSource === 'network' ? '실시간 API' : dataSource === 'cache' ? '저장된 응답' : '데모 데이터'
+  const forecastLabel = forecastDate ? forecastDateFormatter.format(new Date(`${forecastDate}T00:00:00`)) : formatDateWithWeekday(selectedDate)
 
   return (
     <div className={`app-shell ${weatherClass(selectedSpot.heroWeather)}`}>
@@ -562,10 +883,15 @@ function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">서핑 API 연동 대시보드</p>
-          <h1>국립해양조사원 서핑지수를 지도와 카드 UI에 연결했습니다.</h1>
+          <h1>국립해양조사원 서핑지수를 날짜 네비게이션 UI와 함께 탐색합니다.</h1>
           <p className="topbar-copy">{dataMessage}</p>
         </div>
         <div className="topbar-meta">
+          <div className="meta-pill">
+            <span className="meta-label">선택 날짜</span>
+            <strong>{absoluteDateLabel}</strong>
+            <span>{weekdayFormatter.format(selectedDate)} · {relativeDateLabel}</span>
+          </div>
           <div className="meta-pill">
             <span className="meta-label">예보 기준일</span>
             <strong>{forecastLabel}</strong>
@@ -575,7 +901,7 @@ function App() {
             <strong>{sourceLabel}</strong>
           </div>
           <div className={`meta-pill level-pill ${levelClass(selectedSpot.currentLevel)}`}>
-            <span className="meta-label">추천 포인트</span>
+            <span className="meta-label">선택 포인트</span>
             <strong>{selectedSpot.name}</strong>
           </div>
         </div>
@@ -589,7 +915,7 @@ function App() {
                 <p className="eyebrow">Leaflet 맵</p>
                 <h2>API 기준 한국 서핑 포인트 탐색</h2>
               </div>
-              <p className="section-copy">외부 타일 없이 로컬 지도를 쓰고, API 수치만 캐시 후 반영합니다.</p>
+              <p className="section-copy">API 예보가 있으면 선택 날짜에 우선 반영하고, 없으면 로컬 목업 조건으로 이어서 보여줍니다.</p>
             </div>
 
             <div className="insight-strip">
@@ -615,9 +941,7 @@ function App() {
               </div>
             </div>
 
-            <p className={`status-note ${dataStatus}`}>
-              {dataMessage}
-            </p>
+            <p className={`status-note ${dataStatus}`}>{dataMessage}</p>
 
             <div className="map-stage">
               <div className="map-glow map-stage-glow" style={mapStyle} />
@@ -684,134 +1008,141 @@ function App() {
           </div>
         </section>
 
-        <aside className="section-card sidebar">
-          <div className="sidebar-hero">
-            <div>
-              <p className="eyebrow">오늘의 상세</p>
-              <h2>{selectedSpot.name}</h2>
-              <p className="hero-region">
-                {selectedSpot.region}
-                {selectedSpot.placeCode ? ` · ${selectedSpot.placeCode}` : ' · 코드 미확인'}
-              </p>
-              <p className="hero-region coords">
-                위도 {selectedSpot.lat.toFixed(3)} · 경도 {selectedSpot.lng.toFixed(3)}
-              </p>
+        <div className="sidebar-column">
+          <section className="sidebar-date-nav section-card" aria-label="날짜 이동">
+            <button
+              type="button"
+              className="date-nav-button"
+              onClick={() => handleDateChange(-1)}
+              disabled={selectedDateOffset <= -DAY_RANGE}
+              aria-label={`이전 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, -1))}`}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+            <div className="date-nav-copy">
+              <span className="label">기준 날짜</span>
+              <strong className="date-nav-relative">{relativeDateLabel}</strong>
+              <span className="date-nav-absolute">{formatDateWithWeekday(selectedDate)}</span>
             </div>
-            <div className={`hero-level ${levelClass(selectedSpot.currentLevel)}`}>
-              {levelLabel[selectedSpot.currentLevel]}
-            </div>
-          </div>
-
-          <p className="hero-summary">{selectedSpot.summary}</p>
-
-          <section className="panel-grid current-grid">
-            <div className="info-card">
-              <span className="label">현재 파고</span>
-              <strong>{selectedSpot.current.waveHeight} m</strong>
-            </div>
-            <div className="info-card">
-              <span className="label">파주기</span>
-              <strong>{selectedSpot.current.wavePeriod} s</strong>
-            </div>
-            <div className="info-card">
-              <span className="label">풍속</span>
-              <strong>{selectedSpot.current.windSpeed} m/s</strong>
-            </div>
-            <div className="info-card">
-              <span className="label">수온</span>
-              <strong>{selectedSpot.current.waterTemp}°C</strong>
-            </div>
+            <button
+              type="button"
+              className="date-nav-button"
+              onClick={() => handleDateChange(1)}
+              disabled={selectedDateOffset >= DAY_RANGE}
+              aria-label={`다음 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, 1))}`}
+            >
+              <span aria-hidden="true">→</span>
+            </button>
           </section>
 
-          <section className="panel-section">
-            <div className="section-heading compact">
-              <div>
-                <p className="eyebrow">오늘의 판단</p>
-                <h3>실력별 추천 한 줄</h3>
-              </div>
-            </div>
-            <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
-              {skillLevels.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  className={selectedSkill === level ? 'is-selected' : ''}
-                  onClick={() => setSelectedSkill(level)}
-                >
-                  {skillLabel[level]}
-                </button>
-              ))}
-            </div>
-            <div className="narrative-card">
-              <span className="label">오늘의 해석</span>
-              <p>{selectedSpot.skillNotes[selectedSkill]}</p>
-            </div>
-          </section>
-
-          <section className="panel-section">
-            <div className="section-heading compact">
-              <div>
-                <p className="eyebrow">오늘 컨디션 요약</p>
-                <h3>현장 체크 포인트</h3>
-              </div>
-            </div>
-            <div className="detail-card">
-              <div className="detail-title">
-                <strong>{todayFormatter.format(new Date())}</strong>
+          <aside className="section-card sidebar">
+            <section className="spot-nav-panel" aria-label="포인트 이동">
+              <div className="spot-nav-head">
+                <div>
+                  <p className="eyebrow">{relativeDateLabel}의 포인트</p>
+                  <h3>{selectedSpot.name}</h3>
+                </div>
                 <span className={`hero-level mini ${levelClass(selectedSpot.currentLevel)}`}>
                   {levelLabel[selectedSpot.currentLevel]}
                 </span>
               </div>
-              <p>{selectedSpot.current.weatherLabel}</p>
-              <div className="detail-metrics">
-                <span>{weatherLabel[selectedSpot.heroWeather]}</span>
-                <span>추천 시간 {selectedSpot.current.recommendedTime}</span>
-                <span>풍속 {selectedSpot.current.windSpeed} m/s</span>
+              <p className="spot-nav-meta">
+                {selectedSpot.region}
+                {selectedSpot.placeCode ? ` · ${selectedSpot.placeCode}` : ' · 코드 미확인'}
+                {` · ${selectedSpotIndex + 1}/${resolvedSpots.length}`}
+              </p>
+              <p className="spot-nav-meta">
+                위도 {selectedSpot.lat.toFixed(3)} · 경도 {selectedSpot.lng.toFixed(3)}
+              </p>
+              <p className="spot-nav-summary">{selectedSpot.spotlight}</p>
+              <div className="spot-nav-actions">
+                <button
+                  type="button"
+                  className="date-nav-button"
+                  onClick={() => handleSpotStep(-1)}
+                  aria-label={`이전 포인트 보기: ${resolvedSpots[mod(selectedSpotIndex - 1, resolvedSpots.length)].name}`}
+                >
+                  <span aria-hidden="true">←</span>
+                </button>
+                <div className="spot-nav-metrics">
+                  <span>{selectedSpot.current.waveHeight} m</span>
+                  <span>{selectedSpot.current.windSpeed} m/s</span>
+                  <span>{selectedSpot.current.recommendedTime}</span>
+                </div>
+                <button
+                  type="button"
+                  className="date-nav-button"
+                  onClick={() => handleSpotStep(1)}
+                  aria-label={`다음 포인트 보기: ${resolvedSpots[mod(selectedSpotIndex + 1, resolvedSpots.length)].name}`}
+                >
+                  <span aria-hidden="true">→</span>
+                </button>
               </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="panel-section">
-            <div className="section-heading compact">
-              <div>
-                <p className="eyebrow">주변 정보</p>
-                <h3>맛집과 실용 포인트</h3>
-              </div>
-            </div>
-            <div className="local-list">
-              {selectedSpot.localPicks.map((place) => (
-                <article key={place.title} className="local-card">
-                  <div className="local-head">
-                    <div>
-                      <strong>{place.title}</strong>
-                      <p>
-                        {place.type} · {place.distance}
-                      </p>
-                    </div>
-                    <span className="tag">{place.tag}</span>
-                  </div>
-                  <p>{place.description}</p>
-                </article>
-              ))}
-            </div>
-          </section>
+            <p className="hero-summary">{selectedSpot.summary}</p>
 
-          <section className="panel-section">
-            <div className="section-heading compact">
-              <div>
-                <p className="eyebrow">현장 메모</p>
-                <h3>특별 안내</h3>
+            <section className="panel-grid current-grid">
+              <div className="info-card">
+                <span className="label">현재 파고</span>
+                <strong>{selectedSpot.current.waveHeight} m</strong>
               </div>
-            </div>
-            <div className="tag-list">
-              {selectedSpot.specialInfo.map((item) => (
-                <span key={item} className="tag">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </section>
-        </aside>
+              <div className="info-card">
+                <span className="label">파주기</span>
+                <strong>{selectedSpot.current.wavePeriod} s</strong>
+              </div>
+              <div className="info-card">
+                <span className="label">풍속</span>
+                <strong>{selectedSpot.current.windSpeed} m/s</strong>
+              </div>
+              <div className="info-card">
+                <span className="label">수온</span>
+                <strong>{selectedSpot.current.waterTemp}°C</strong>
+              </div>
+            </section>
+
+            <section className="panel-section">
+              <div className="section-heading compact">
+                <div>
+                  <p className="eyebrow">{relativeDateLabel}의 판단</p>
+                  <h3>실력별 추천 한 줄</h3>
+                </div>
+              </div>
+              <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
+                {skillLevels.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={selectedSkill === level ? 'is-selected' : ''}
+                    onClick={() => setSelectedSkill(level)}
+                  >
+                    {skillLabel[level]}
+                  </button>
+                ))}
+              </div>
+              <div className="narrative-card">
+                <span className="label">{relativeDateLabel}의 해석</span>
+                <p>{selectedSpot.skillNotes[selectedSkill]}</p>
+              </div>
+            </section>
+
+            <section className="panel-section">
+              <div className="section-heading compact">
+                <div>
+                  <p className="eyebrow">현장 메모</p>
+                  <h3>특별 안내</h3>
+                </div>
+              </div>
+              <div className="tag-list">
+                {selectedSpot.specialInfo.map((item) => (
+                  <span key={item} className="tag">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </div>
       </main>
     </div>
   )
