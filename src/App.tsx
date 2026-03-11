@@ -15,6 +15,7 @@ import {
   type SurfLevel,
   type WeatherType,
 } from './lib/surfing'
+import { surfTipsBySpotId } from './lib/surfTips'
 
 type LocalCard = {
   title: string
@@ -114,7 +115,6 @@ type WaveReadingEntry = {
 }
 
 const DAY_RANGE = 7
-const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
 const weatherTypes: WeatherType[] = ['sunny', 'cloudy', 'windy', 'rainy']
 const mapCenter: LatLngExpression = [36.2, 127.9]
 const koreaMaxBounds: LatLngBoundsExpression = [
@@ -122,8 +122,10 @@ const koreaMaxBounds: LatLngBoundsExpression = [
   [39.5, 132.0],
 ]
 const weekdayFormatter = new Intl.DateTimeFormat('ko-KR', { weekday: 'short' })
-const forecastDateFormatter = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' })
 const today = startOfDay(new Date())
+const WAVE_VISUAL_MAX_HEIGHT = 2
+const WAVE_SCALE_MARKS = [1.5, 1, 0.5] as const
+const SURFER_REFERENCE_HEIGHT = 1.6
 
 const levelLabel: Record<SurfLevel, string> = {
   'very-good': '매우 좋음',
@@ -131,12 +133,6 @@ const levelLabel: Record<SurfLevel, string> = {
   fair: '보통',
   poor: '주의',
   flat: '비추천',
-}
-
-const skillLabel: Record<SkillLevel, string> = {
-  beginner: '초급',
-  intermediate: '중급',
-  advanced: '상급',
 }
 
 const markerLegend = [
@@ -160,13 +156,13 @@ const metricInfo: Record<
   }
 > = {
   waveHeight: {
-    label: '현재 파고',
+    label: '파도 높이',
     description: '의미: 들어오는 파도의 평균 높이입니다.',
     interpretation: '해석: 0.5m 이하는 약하고, 0.8~1.5m는 무난하며, 1.8m 이상은 난도가 올라갑니다.',
     formatValue: (spot) => `${spot.current.waveHeight} m`,
   },
   wavePeriod: {
-    label: '파주기',
+    label: '피리어드',
     description: '의미: 파도와 파도 사이의 시간 간격입니다.',
     interpretation: '해석: 5초 이하는 짧고, 6~8초는 보통, 9초 이상은 더 힘 있는 세트일 수 있습니다.',
     formatValue: (spot) => `${spot.current.wavePeriod} s`,
@@ -855,7 +851,7 @@ function buildApiSkillNote(items: SurfingApiItem[], skillLevel: SkillLevel) {
     return '예보 데이터가 아직 정리되지 않았습니다.'
   }
 
-  return `${picked.predcNoonSeCd} 기준 ${picked.totalIndex} 컨디션입니다. 파고 ${picked.avgWvhgt.toFixed(1)}m, 파주기 ${picked.avgWvpd.toFixed(1)}초, 풍속 ${picked.avgWspd.toFixed(1)}m/s입니다.`
+  return `${picked.predcNoonSeCd} 기준 ${picked.totalIndex} 컨디션입니다. 파도 높이 ${picked.avgWvhgt.toFixed(1)}m, 피리어드 ${picked.avgWvpd.toFixed(1)}초, 풍속 ${picked.avgWspd.toFixed(1)}m/s입니다.`
 }
 
 function buildBeginnerWaveReading(spot: ResolvedSpot): WaveReadingEntry[] {
@@ -1152,6 +1148,8 @@ function WaveAnimation({
   wavePeriod: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const displayedWaveHeight = clamp(waveHeight, 0.2, WAVE_VISUAL_MAX_HEIGHT)
+  const surferHeight = `${(SURFER_REFERENCE_HEIGHT / WAVE_VISUAL_MAX_HEIGHT) * 100}%`
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1166,9 +1164,11 @@ function WaveAnimation({
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     const pixelRatio = window.devicePixelRatio > 1 ? 2 : 1
-    const amplitude = clamp(12 + waveHeight * 24, 12, 54)
+    const safeWaveHeight = clamp(waveHeight, 0.2, WAVE_VISUAL_MAX_HEIGHT)
     const wavelength = clamp(110 + wavePeriod * 28, 160, 390)
     const speed = clamp(0.3 + (9 - wavePeriod) * 0.035, 0.08, 0.36)
+    const topPadding = 16
+    const bottomPadding = 18
 
     let animationFrame = 0
     let width = 0
@@ -1186,37 +1186,105 @@ function WaveAnimation({
     const draw = (time: number) => {
       context.clearRect(0, 0, width, height)
 
-      const baseline = height * 0.62
+      const usableHeight = Math.max(height - topPadding - bottomPadding, 80)
+      const primaryAmplitude = clamp((safeWaveHeight / WAVE_VISUAL_MAX_HEIGHT) * usableHeight * 0.5, 8, usableHeight * 0.44)
+      const secondaryAmplitude = Math.max(primaryAmplitude * 0.48, 6)
+      const primaryBaseline = height - bottomPadding - primaryAmplitude - 4
+      const secondaryBaseline = height - bottomPadding - secondaryAmplitude - 14
       const phase = motionQuery.matches ? 0 : time * 0.0012 * speed * Math.PI * 2
-      const gradient = context.createLinearGradient(0, baseline - amplitude, 0, height)
-      gradient.addColorStop(0, 'rgba(91, 201, 255, 0.96)')
-      gradient.addColorStop(1, 'rgba(16, 119, 194, 0.92)')
+      const backgroundGradient = context.createLinearGradient(0, 0, 0, height)
+      backgroundGradient.addColorStop(0, 'rgba(246, 252, 255, 0.98)')
+      backgroundGradient.addColorStop(0.4, 'rgba(214, 240, 251, 0.95)')
+      backgroundGradient.addColorStop(1, 'rgba(163, 211, 236, 0.92)')
+      context.fillStyle = backgroundGradient
+      context.fillRect(0, 0, width, height)
 
-      context.beginPath()
-      context.moveTo(0, height)
+      const glowGradient = context.createRadialGradient(width * 0.7, height * 0.18, 18, width * 0.7, height * 0.18, width * 0.48)
+      glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.42)')
+      glowGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+      context.fillStyle = glowGradient
+      context.fillRect(0, 0, width, height)
 
-      for (let x = 0; x <= width; x += 4) {
-        const y = baseline + Math.sin((x / wavelength) * Math.PI * 2 + phase) * amplitude
-        context.lineTo(x, y)
-      }
+      const waveY = (x: number, baseline: number, amplitude: number) =>
+        baseline +
+        Math.sin((x / wavelength) * Math.PI * 2 + phase) * amplitude +
+        Math.sin((x / (wavelength * 0.45)) * Math.PI * 2 + phase * 1.08) * amplitude * 0.16
 
-      context.lineTo(width, height)
-      context.closePath()
-      context.fillStyle = gradient
-      context.fill()
+      const renderWave = ({
+        baseline,
+        amplitude,
+        crestTop,
+        bodyBottom,
+        foamColor,
+        glowColor,
+      }: {
+        baseline: number
+        amplitude: number
+        crestTop: string
+        bodyBottom: string
+        foamColor: string
+        glowColor: string
+      }) => {
+        const gradient = context.createLinearGradient(0, baseline - amplitude - 10, 0, height)
+        gradient.addColorStop(0, crestTop)
+        gradient.addColorStop(1, bodyBottom)
 
-      context.beginPath()
-      for (let x = 0; x <= width; x += 4) {
-        const y = baseline + Math.sin((x / wavelength) * Math.PI * 2 + phase) * amplitude
-        if (x === 0) {
-          context.moveTo(x, y)
-        } else {
-          context.lineTo(x, y)
+        context.beginPath()
+        context.moveTo(0, height)
+
+        for (let x = 0; x <= width; x += 4) {
+          context.lineTo(x, waveY(x, baseline, amplitude))
         }
+
+        context.lineTo(width, height)
+        context.closePath()
+        context.fillStyle = gradient
+        context.fill()
+
+        context.beginPath()
+        for (let x = 0; x <= width; x += 4) {
+          const y = waveY(x, baseline, amplitude)
+          if (x === 0) {
+            context.moveTo(x, y)
+          } else {
+            context.lineTo(x, y)
+          }
+        }
+        context.strokeStyle = foamColor
+        context.lineWidth = 2
+        context.stroke()
+
+        context.beginPath()
+        for (let x = 0; x <= width; x += 12) {
+          const y = waveY(x, baseline, amplitude)
+          if (x === 0) {
+            context.moveTo(x, y - 2)
+          } else {
+            context.lineTo(x, y - 2)
+          }
+        }
+        context.strokeStyle = glowColor
+        context.lineWidth = 5
+        context.stroke()
       }
-      context.strokeStyle = 'rgba(255, 255, 255, 0.72)'
-      context.lineWidth = 2
-      context.stroke()
+
+      renderWave({
+        baseline: secondaryBaseline,
+        amplitude: secondaryAmplitude,
+        crestTop: 'rgba(107, 169, 202, 0.54)',
+        bodyBottom: 'rgba(28, 90, 128, 0.64)',
+        foamColor: 'rgba(224, 241, 247, 0.34)',
+        glowColor: 'rgba(211, 235, 245, 0.18)',
+      })
+
+      renderWave({
+        baseline: primaryBaseline,
+        amplitude: primaryAmplitude,
+        crestTop: 'rgba(117, 208, 232, 0.95)',
+        bodyBottom: 'rgba(24, 103, 153, 0.94)',
+        foamColor: 'rgba(255, 255, 255, 0.74)',
+        glowColor: 'rgba(178, 238, 245, 0.28)',
+      })
 
       if (!motionQuery.matches) {
         animationFrame = window.requestAnimationFrame(draw)
@@ -1241,9 +1309,32 @@ function WaveAnimation({
 
   return (
     <div className="wave-animation-shell">
-      <canvas ref={canvasRef} className="wave-animation-canvas" aria-hidden="true" />
+      <div className="wave-animation-stage">
+        <canvas ref={canvasRef} className="wave-animation-canvas" aria-hidden="true" />
+        <div className="wave-animation-overlay" aria-hidden="true">
+          <div className="wave-scale-axis" />
+          {WAVE_SCALE_MARKS.map((mark) => {
+            const lineStyle = {
+              '--line-position': `${100 - (mark / WAVE_VISUAL_MAX_HEIGHT) * 100}%`,
+            } as CSSProperties & Record<'--line-position', string>
+
+            return (
+              <div key={mark} className="wave-scale-line" style={lineStyle}>
+                <span className="wave-scale-label">{mark.toFixed(mark % 1 === 0 ? 0 : 1)}m</span>
+              </div>
+            )
+          })}
+          <div
+            className="wave-surfer"
+            style={{ '--surfer-height': surferHeight } as CSSProperties & Record<'--surfer-height', string>}
+          >
+            <span className="wave-surfer-label">{SURFER_REFERENCE_HEIGHT.toFixed(1)}m</span>
+            <span className="wave-surfer-emoji">🏄🏽</span>
+          </div>
+        </div>
+      </div>
       <div className="wave-animation-meta">
-        <span>파도 높이 {waveHeight.toFixed(1)}m</span>
+        <span>파도 높이 {displayedWaveHeight.toFixed(1)}m</span>
         <span>피리어드 {wavePeriod.toFixed(1)}s</span>
       </div>
     </div>
@@ -1300,6 +1391,7 @@ function SpotDetailPage({
  const [activeTab, setActiveTab] = useState<DetailTab>('weekly-forecast')
  const nearbyPlaces = useMemo(() => mergeNearbyPlaces(baseSpot), [baseSpot])
  const [selectedNearbyPlace, setSelectedNearbyPlace] = useState<NearbyPlace | null>(null)
+ const surfTipContent = surfTipsBySpotId[spot.id]
 
  const weekForecast = useMemo(() => {
    const spotIndex = baseSpots.findIndex((s) => s.id === baseSpot.id)
@@ -1412,7 +1504,41 @@ function SpotDetailPage({
  </div>
  )}
  {activeTab === 'tips' && (
- <p className="detail-tab-placeholder">서핑팁이 곧 제공됩니다.</p>
+ surfTipContent ? (
+ <section className="surf-tip-panel" aria-label={`${spot.name} 서핑 팁`}>
+ <p className="surf-tip-summary">{surfTipContent.summary}</p>
+ <p className="surf-tip-basis">{surfTipContent.basis}</p>
+ <div className="surf-tip-grid">
+ {surfTipContent.sections.map((section) => (
+ <article key={section.title} className="surf-tip-card">
+ <h3>{section.title}</h3>
+ <ul className="surf-tip-list">
+ {section.items.map((item) => (
+ <li key={item}>{item}</li>
+ ))}
+ </ul>
+ </article>
+ ))}
+ </div>
+ <div className="surf-tip-sources">
+ <strong>참고 출처</strong>
+ <div className="surf-tip-source-links">
+ {surfTipContent.sources.map((source) => (
+ <a
+ key={source.href}
+ href={source.href}
+ target="_blank"
+ rel="noreferrer"
+ >
+ {source.label}
+ </a>
+ ))}
+ </div>
+ </div>
+ </section>
+ ) : (
+ <p className="detail-tab-placeholder">서핑팁을 준비 중입니다.</p>
+ )
  )}
  </div>
  </section>
@@ -1505,15 +1631,14 @@ function App() {
   const serviceKey = getSurfingApiKey()
  const [screenMode, setScreenMode] = useState<ScreenMode>("dashboard")
   const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
-  const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [selectedDate, setSelectedDate] = useState(today)
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
   const [apiItems, setApiItems] = useState<SurfingApiItem[]>([])
   const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
-  const [dataSource, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
+  const [, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
   const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
-  const [forecastDate, setForecastDate] = useState<string | null>(null)
+  const [, setForecastDate] = useState<string | null>(null)
 
   const selectedDateOffset = diffCalendarDays(selectedDate, today)
   const relativeDateLabel = formatRelativeDateLabel(selectedDate)
@@ -1629,9 +1754,6 @@ function App() {
       cancelled = true
     }
   }, [serviceKey])
-
-  const sourceLabel = dataSource === 'network' ? '실시간 API' : dataSource === 'cache' ? '저장된 응답' : '데모 데이터'
-  const forecastLabel = forecastDate ? forecastDateFormatter.format(new Date(`${forecastDate}T00:00:00`)) : formatDateWithWeekday(selectedDate)
 
   return (
     <div className={`app-shell ${weatherClass(selectedSpot.heroWeather)}`}>
@@ -1846,22 +1968,6 @@ function App() {
                   waveHeight={selectedSpot.current.waveHeight}
                   wavePeriod={selectedSpot.current.wavePeriod}
                 />
-              </div>
-              <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
-                {skillLevels.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={selectedSkill === level ? 'is-selected' : ''}
-                    onClick={() => setSelectedSkill(level)}
-                  >
-                    {skillLabel[level]}
-                  </button>
-                ))}
-              </div>
-              <div className="narrative-card">
-                <span className="label">{relativeDateLabel}의 해석</span>
-                <p>{selectedSpot.skillNotes[selectedSkill]}</p>
               </div>
               <div className="narrative-card">
                 <span className="label">오늘의 파도 읽기</span>
