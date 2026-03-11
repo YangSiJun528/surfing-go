@@ -81,6 +81,12 @@
   letter-spacing: -0.04em;
 }
 
+.topbar-copy {
+  max-width: 40rem;
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+}
+
 .eyebrow,
 .label {
   margin: 0;
@@ -115,6 +121,10 @@
   min-width: 9rem;
   padding: 0.85rem 1rem;
   border-radius: 1rem;
+}
+
+.meta-label {
+  color: var(--muted);
 }
 
 .meta-pill strong {
@@ -196,6 +206,27 @@
   display: block;
   margin: 0.15rem 0;
   font-size: 1.2rem;
+}
+
+.status-note {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.status-note.ready {
+  border-color: rgba(77, 225, 209, 0.45);
+}
+
+.status-note.loading {
+  border-color: rgba(88, 182, 255, 0.45);
+}
+
+.status-note.fallback {
+  border-color: rgba(255, 139, 97, 0.45);
 }
 
 .insight-metrics {

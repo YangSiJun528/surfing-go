@@ -1,14 +1,19 @@
 import { startTransition, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import type { Feature } from 'geojson'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { divIcon } from 'leaflet'
 import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
-
-type SurfLevel = 'very-good' | 'good' | 'fair' | 'poor' | 'flat'
-type SkillLevel = 'beginner' | 'intermediate' | 'advanced'
-type WeatherType = 'sunny' | 'cloudy' | 'rainy' | 'windy'
+import {
+  buildSpotApiRuntimeMap,
+  getSurfingApiKey,
+  loadSurfingForecastData,
+  type SkillLevel,
+  type SurfLevel,
+  type WeatherType,
+} from './lib/surfing'
 
 type LocalCard = {
   title: string
@@ -80,7 +85,12 @@ const todayFormatter = new Intl.DateTimeFormat('ko-KR', {
   weekday: 'short',
 })
 
-const spots: Spot[] = [
+const forecastDateFormatter = new Intl.DateTimeFormat('ko-KR', {
+  month: 'long',
+  day: 'numeric',
+})
+
+const demoSpots: Spot[] = [
   {
     id: 'SR1',
     name: '송정해수욕장',
@@ -425,17 +435,45 @@ function buildMarkerNodes(spots: Spot[], zoom: number): MarkerNode[] {
   return clusters
 }
 
+function mergeSpotsWithApi(spots: Spot[], data: Awaited<ReturnType<typeof loadSurfingForecastData>>) {
+  if (!data) {
+    return spots
+  }
+
+  const runtimeMap = buildSpotApiRuntimeMap(data.items)
+  return spots.map((spot) => {
+    const runtime = runtimeMap.get(spot.name)
+    if (!runtime) {
+      return spot
+    }
+
+    return {
+      ...spot,
+      currentLevel: runtime.currentLevel,
+      heroWeather: runtime.heroWeather,
+      current: runtime.current,
+      skillNotes: runtime.skillNotes,
+    }
+  })
+}
+
 function App() {
-  const [selectedSpotId, setSelectedSpotId] = useState(spots[0].id)
+  const serviceKey = getSurfingApiKey()
+  const [spots, setSpots] = useState<Spot[]>(demoSpots)
+  const [selectedSpotId, setSelectedSpotId] = useState(demoSpots[0].id)
   const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [mapZoom, setMapZoom] = useState(7)
-  const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<any>(null)
+  const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature | null>(null)
+  const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
+  const [dataSource, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
+  const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
+  const [forecastDate, setForecastDate] = useState<string | null>(null)
 
   const selectedSpot = useMemo(
     () => spots.find((spot) => spot.id === selectedSpotId) ?? spots[0],
-    [selectedSpotId],
+    [selectedSpotId, spots],
   )
-  const markerNodes = useMemo(() => buildMarkerNodes(spots, mapZoom), [mapZoom])
+  const markerNodes = useMemo(() => buildMarkerNodes(spots, mapZoom), [mapZoom, spots])
 
   const mapStyle = {
     '--focus-x': `${selectedSpot.lng > 128 ? 70 : selectedSpot.lng < 127 ? 28 : 54}%`,
@@ -456,7 +494,7 @@ function App() {
       .then((response) => response.json())
       .then((atlas) => {
         const collection = topojsonFeature(atlas, atlas.objects.countries) as unknown as {
-          features: Array<{ id: string; properties: { name: string }; geometry: object }>
+          features: Feature[]
         }
         const southKorea = collection.features.find((feature) => feature.id === '410')
         if (!cancelled && southKorea) {
@@ -469,6 +507,53 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    if (!serviceKey) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    loadSurfingForecastData({ serviceKey })
+      .then((result) => {
+        if (cancelled) {
+          return
+        }
+
+        setSpots(mergeSpotsWithApi(demoSpots, result))
+        setDataStatus('ready')
+        setDataSource(result.source)
+        setForecastDate(result.items[0]?.predcYmd ?? null)
+        setDataMessage(
+          result.source === 'cache'
+            ? '저장된 API 응답을 재사용했습니다.'
+            : '실시간 API 응답을 반영했습니다.',
+        )
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return
+        }
+
+        setDataStatus('fallback')
+        setDataSource('demo')
+        setForecastDate(null)
+        setDataMessage(error instanceof Error ? `${error.message}. 데모 데이터로 전환했습니다.` : 'API 호출에 실패해 데모 데이터를 표시합니다.')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [serviceKey])
+
+  const sourceLabel =
+    dataSource === 'network' ? '실시간 API' : dataSource === 'cache' ? '저장된 응답' : '데모 데이터'
+  const forecastLabel = forecastDate
+    ? forecastDateFormatter.format(new Date(`${forecastDate}T00:00:00`))
+    : todayFormatter.format(new Date())
+
   return (
     <div className={`app-shell ${weatherClass(selectedSpot.heroWeather)}`}>
       <div className="background-aurora" />
@@ -476,13 +561,18 @@ function App() {
 
       <header className="topbar">
         <div>
-          <p className="eyebrow">오늘의 서핑 포인트</p>
-          <h1>Leaflet 기반으로 오늘 기준 컨디션만 빠르게 확인하는 데모입니다.</h1>
+          <p className="eyebrow">서핑 API 연동 대시보드</p>
+          <h1>국립해양조사원 서핑지수를 지도와 카드 UI에 연결했습니다.</h1>
+          <p className="topbar-copy">{dataMessage}</p>
         </div>
         <div className="topbar-meta">
           <div className="meta-pill">
-            <span className="meta-label">오늘 날짜</span>
-            <strong>{todayFormatter.format(new Date())}</strong>
+            <span className="meta-label">예보 기준일</span>
+            <strong>{forecastLabel}</strong>
+          </div>
+          <div className="meta-pill">
+            <span className="meta-label">데이터 소스</span>
+            <strong>{sourceLabel}</strong>
           </div>
           <div className={`meta-pill level-pill ${levelClass(selectedSpot.currentLevel)}`}>
             <span className="meta-label">추천 포인트</span>
@@ -497,9 +587,9 @@ function App() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Leaflet 맵</p>
-                <h2>위도·경도 기준 한국 포인트 탐색</h2>
+                <h2>API 기준 한국 서핑 포인트 탐색</h2>
               </div>
-              <p className="section-copy">외부 타일 없이 로컬 SVG 지도를 오버레이하고, 실제 좌표로 마커를 배치합니다.</p>
+              <p className="section-copy">외부 타일 없이 로컬 지도를 쓰고, API 수치만 캐시 후 반영합니다.</p>
             </div>
 
             <div className="insight-strip">
@@ -524,6 +614,10 @@ function App() {
                 </div>
               </div>
             </div>
+
+            <p className={`status-note ${dataStatus}`}>
+              {dataMessage}
+            </p>
 
             <div className="map-stage">
               <div className="map-glow map-stage-glow" style={mapStyle} />
@@ -597,7 +691,7 @@ function App() {
               <h2>{selectedSpot.name}</h2>
               <p className="hero-region">
                 {selectedSpot.region}
-                {selectedSpot.placeCode ? ` · ${selectedSpot.placeCode}` : ' · 더미 포인트'}
+                {selectedSpot.placeCode ? ` · ${selectedSpot.placeCode}` : ' · 코드 미확인'}
               </p>
               <p className="hero-region coords">
                 위도 {selectedSpot.lat.toFixed(3)} · 경도 {selectedSpot.lng.toFixed(3)}
