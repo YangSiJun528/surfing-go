@@ -521,6 +521,40 @@
   margin-top: 0.85rem;
 }
 
+.forecast-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.forecast-status-pill {
+  padding: 0.4rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.forecast-status-pill.is-api {
+  color: #0f635b;
+  background: rgba(77, 225, 209, 0.18);
+}
+
+.forecast-status-pill.is-loading {
+  color: #1f5a85;
+  background: rgba(88, 182, 255, 0.16);
+}
+
+.forecast-status-pill.is-fallback,
+.forecast-status-pill.is-idle {
+  color: #8d4e1f;
+  background: rgba(244, 201, 93, 0.2);
+}
+
+.forecast-status-copy {
+  font-size: 0.88rem;
+}
+
 .ghost-button {
   padding: 0.65rem 1rem;
   border: 1px solid rgba(85, 142, 181, 0.18);
@@ -653,7 +687,8 @@
   .detail-title,
   .local-head,
   .forecast-summary-card,
-  .forecast-list-row {
+  .forecast-list-row,
+  .forecast-status-row {
     flex-direction: column;
     align-items: flex-start;
   }

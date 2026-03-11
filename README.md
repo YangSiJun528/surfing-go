@@ -72,3 +72,10 @@ export default defineConfig([
 ])
 ```
 # surfing-go
+
+
+## Surfing API
+
+1. `.env.example`를 참고해서 `.env.local`을 만듭니다.
+2. `VITE_SURFING_API_KEY`에 공공데이터포털의 URL-encoded 인증키를 넣습니다.
+3. 키가 없거나 API 응답이 실패하면 일주일 예보는 자동으로 목데이터로 fallback됩니다.

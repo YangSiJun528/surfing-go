@@ -5,7 +5,8 @@ import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
-import { forecastIndexClass, forecastItems, formatForecastDate, skillGradeLabel, sortForecastItems } from './forecast'
+import{forecastIndexClass,forecastItems as mockForecastItems,formatForecastDate,skillGradeLabel,sortForecastItems,type ForecastApiItem}from'./forecast'
+import{SurfApiError,fetchForecastByPlaceCode,formatKstForecastDate,getKstForecastPeriod}from'./surfApi'
 
 type SurfLevel = 'very-good' | 'good' | 'fair' | 'poor' | 'flat'
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -46,6 +47,16 @@ type Spot = {
 type MarkerNode =
   | { kind: 'spot'; spot: Spot }
   | { kind: 'cluster'; id: string; spots: Spot[]; lat: number; lng: number; label: string }
+
+type ForecastSyncState={
+  status:'idle'|'loading'|'api'|'fallback'
+  message:string
+}
+
+const defaultForecastSyncState:ForecastSyncState={
+  status:'idle',
+  message:'선택한 스팟의 예보를 아직 불러오지 않았어요.',
+}
 
 const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
 const mapCenter: LatLngExpression = [36.2, 127.9]
@@ -455,6 +466,8 @@ function App() {
   const [selectedSpotId, setSelectedSpotId] = useState(spots[0].id)
   const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [isForecastExpanded, setIsForecastExpanded] = useState(false)
+  const [apiForecastByPlaceCode, setApiForecastByPlaceCode] = useState<Record<string,ForecastApiItem[]>>({})
+  const [forecastStateByPlaceCode, setForecastStateByPlaceCode] = useState<Record<string,ForecastSyncState>>({})
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<any>(null)
 
@@ -462,18 +475,30 @@ function App() {
     () => spots.find((spot) => spot.id === selectedSpotId) ?? spots[0],
     [selectedSpotId],
   )
-  const markerNodes = useMemo(() => buildMarkerNodes(spots, mapZoom), [mapZoom])
-  const weeklyForecastItems = useMemo(
-    () =>
-      sortForecastItems(
-        forecastItems.filter(
-          (item) =>
-            item.placeCode === selectedSpot.placeCode &&
-            item.grdCn === skillGradeLabel[selectedSkill],
-        ),
-      ),
-    [selectedSkill, selectedSpot.placeCode],
+  const selectedPlaceCode=selectedSpot.placeCode??''
+  const selectedApiForecastItems=selectedPlaceCode?apiForecastByPlaceCode[selectedPlaceCode]:undefined
+  const selectedForecastState:ForecastSyncState=selectedPlaceCode
+    ?forecastStateByPlaceCode[selectedPlaceCode]??defaultForecastSyncState
+    :{status:'fallback',message:'장소 코드가 없어 목데이터를 표시하고 있어요.'}
+  const markerNodes=useMemo(()=>buildMarkerNodes(spots,mapZoom),[mapZoom])
+  const selectedSpotForecastItems=useMemo(
+    ()=>sortForecastItems((selectedApiForecastItems??mockForecastItems).filter((item)=>item.placeCode===selectedPlaceCode)),
+    [selectedApiForecastItems,selectedPlaceCode],
   )
+  const weeklyForecastItems=useMemo(
+    ()=>selectedSpotForecastItems.filter((item)=>item.grdCn===skillGradeLabel[selectedSkill]),
+    [selectedSkill,selectedSpotForecastItems],
+  )
+  const currentForecastItem=useMemo(()=>{
+    const todayForecastDate=formatKstForecastDate()
+    const currentForecastPeriod=getKstForecastPeriod()
+    return weeklyForecastItems.find((item)=>item.predcYmd===todayForecastDate&&item.predcNoonSeCd===currentForecastPeriod)??weeklyForecastItems.find((item)=>item.predcYmd===todayForecastDate)??weeklyForecastItems[0]
+  },[weeklyForecastItems])
+  const currentWaveHeight=currentForecastItem?.avgWvhgt??selectedSpot.current.waveHeight
+  const currentWavePeriod=currentForecastItem?.avgWvpd??selectedSpot.current.wavePeriod
+  const currentWindSpeed=currentForecastItem?.avgWspd??selectedSpot.current.windSpeed
+  const currentWaterTemp=currentForecastItem?.avgWtem??selectedSpot.current.waterTemp
+  const forecastStatusLabel=selectedForecastState.status==='api'?'API 연동':selectedForecastState.status==='loading'?'불러오는 중':'목데이터'
 
   const mapStyle = {
     '--focus-x': `${selectedSpot.lng > 128 ? 70 : selectedSpot.lng < 127 ? 28 : 54}%`,
@@ -487,6 +512,37 @@ function App() {
       setIsForecastExpanded(false)
     })
   }
+
+  useEffect(()=>{
+    if(!selectedPlaceCode||selectedApiForecastItems||selectedForecastState.status!=='idle'){
+      return
+    }
+
+    let cancelled=false
+    setForecastStateByPlaceCode((prev)=>({...prev,[selectedPlaceCode]:{status:'loading',message:'국립해양조사원 API에서 일주일 예보를 불러오는 중이에요.'}}))
+
+    fetchForecastByPlaceCode(selectedPlaceCode)
+      .then((items)=>{
+        if(cancelled){
+          return
+        }
+
+        setApiForecastByPlaceCode((prev)=>({...prev,[selectedPlaceCode]:items}))
+        setForecastStateByPlaceCode((prev)=>({...prev,[selectedPlaceCode]:{status:'api',message:'국립해양조사원 서핑지수 API 기준으로 표시 중이에요.'}}))
+      })
+      .catch((error:unknown)=>{
+        if(cancelled){
+          return
+        }
+
+        const message=error instanceof SurfApiError?error.message:'서핑 API 연결에 실패해서 목데이터를 표시 중이에요.'
+        setForecastStateByPlaceCode((prev)=>({...prev,[selectedPlaceCode]:{status:'fallback',message}}))
+      })
+
+    return()=>{
+      cancelled=true
+    }
+  },[selectedApiForecastItems,selectedForecastState.status,selectedPlaceCode])
 
   useEffect(() => {
     let cancelled = false
@@ -551,11 +607,11 @@ function App() {
               <div className="insight-metrics">
                 <div>
                   <span className="label">파고</span>
-                  <strong>{selectedSpot.current.waveHeight} m</strong>
+                  <strong>{currentWaveHeight.toFixed(1)} m</strong>
                 </div>
                 <div>
                   <span className="label">풍속</span>
-                  <strong>{selectedSpot.current.windSpeed} m/s</strong>
+                  <strong>{currentWindSpeed.toFixed(1)} m/s</strong>
                 </div>
                 <div>
                   <span className="label">추천 시간</span>
@@ -652,19 +708,19 @@ function App() {
           <section className="panel-grid current-grid">
             <div className="info-card">
               <span className="label">현재 파고</span>
-              <strong>{selectedSpot.current.waveHeight} m</strong>
+              <strong>{currentWaveHeight.toFixed(1)} m</strong>
             </div>
             <div className="info-card">
               <span className="label">파주기</span>
-              <strong>{selectedSpot.current.wavePeriod} s</strong>
+              <strong>{currentWavePeriod.toFixed(1)} s</strong>
             </div>
             <div className="info-card">
               <span className="label">풍속</span>
-              <strong>{selectedSpot.current.windSpeed} m/s</strong>
+              <strong>{currentWindSpeed.toFixed(1)} m/s</strong>
             </div>
             <div className="info-card">
               <span className="label">수온</span>
-              <strong>{selectedSpot.current.waterTemp}°C</strong>
+              <strong>{currentWaterTemp.toFixed(1)}°C</strong>
             </div>
           </section>
 
@@ -697,6 +753,10 @@ function App() {
           <div>
             <span className="label">표시 방식</span>
             <p>{selectedSpot.name} 기준으로 가까운 3일은 오전/오후, 이후 4일은 일 단위로 보여줘요.</p>
+            <div className="forecast-status-row">
+              <span className={`forecast-status-pill is-${selectedForecastState.status}`}>{forecastStatusLabel}</span>
+              <p className="forecast-status-copy">{selectedForecastState.message}</p>
+            </div>
           </div>
           <button
             type="button"
@@ -752,7 +812,7 @@ function App() {
               <div className="detail-metrics">
                 <span>{weatherLabel[selectedSpot.heroWeather]}</span>
                 <span>추천 시간 {selectedSpot.current.recommendedTime}</span>
-                <span>풍속 {selectedSpot.current.windSpeed} m/s</span>
+                <span>풍속 {currentWindSpeed.toFixed(1)} m/s</span>
               </div>
             </div>
           </section>
