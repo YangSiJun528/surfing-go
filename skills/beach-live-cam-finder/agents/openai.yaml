@@ -1,4 +1,0 @@
-interface:
-  display_name: "Beach Live Cam Finder"
-  short_description: "Find live YouTube beach cameras for surf spots"
-  default_prompt: "Use $beach-live-cam-finder to find an embeddable live YouTube beach cam for a specific surf beach."

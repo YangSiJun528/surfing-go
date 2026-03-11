@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Feature, Geometry } from 'geojson'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { divIcon } from 'leaflet'
@@ -69,8 +69,13 @@ type MarkerNode =
   | { kind: 'cluster'; id: string; spots: ResolvedSpot[]; lat: number; lng: number; label: string }
 type ScreenMode = "dashboard" | "spot-detail"
 
+type WaveReadingEntry = {
+  label: string
+  value: string
+  description: string
+}
+
 const DAY_RANGE = 7
-const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
 const weatherTypes: WeatherType[] = ['sunny', 'cloudy', 'windy', 'rainy']
 const mapCenter: LatLngExpression = [36.2, 127.9]
 const koreaMaxBounds: LatLngBoundsExpression = [
@@ -87,12 +92,6 @@ const levelLabel: Record<SurfLevel, string> = {
   fair: '보통',
   poor: '주의',
   flat: '비추천',
-}
-
-const skillLabel: Record<SkillLevel, string> = {
-  beginner: '초급',
-  intermediate: '중급',
-  advanced: '상급',
 }
 
 const baseSpots: SpotBase[] = [
@@ -319,6 +318,102 @@ const baseSpots: SpotBase[] = [
       { title: '색달 흑돼지', type: '식사', distance: '차량 9분', description: '세션 뒤 만족도가 높은 제주식 저녁 코스.', tag: '시그니처', address: '제주 서귀포시 중문동 678', operatingHours: '매일 12:00 - 22:00' },
     ],
     specialInfo: ['파도 에너지 강함', '자신감 있는 라이더에게 적합', '시각적으로 가장 화려함', '관광객 교통 고려'],
+  },
+  {
+    id: 'SR2',
+    name: '만리포해수욕장',
+    region: '태안',
+    locationLabel: '충남 태안군',
+    placeCode: 'SR2',
+    lat: 36.7867,
+    lng: 126.14,
+    currentLevel: 'poor',
+    heroWeather: 'cloudy',
+    summary: '서해권에서 빠르게 체크해볼 수 있는 포인트지만, 초보자는 조건 확인이 먼저입니다.',
+    spotlight: '파도가 작게 들어오면 연습용으로 볼 수 있지만 힘이 약한 날이 잦아요.',
+    current: {
+      waveHeight: 0.4,
+      wavePeriod: 4.8,
+      windSpeed: 3.1,
+      waterTemp: 6.2,
+      weatherLabel: '면은 잔잔하지만 파도 힘이 약한 편이에요',
+      recommendedTime: '현장 체크 추천',
+    },
+    skillNotes: {
+      beginner: '잔잔해 보여도 파도 힘이 약하면 연습 효율이 떨어질 수 있어요.',
+      intermediate: '짧은 세션용으로는 볼 수 있지만 원정 우선순위는 높지 않습니다.',
+      advanced: '퍼포먼스 세션보다는 체크 위주로 판단하는 편이 맞습니다.',
+    },
+    localPicks: [
+      { title: '만리포 아침식당', type: '식사', distance: '도보 5분', description: '이른 체크 전에 간단히 식사하기 좋은 현지 식당.', tag: '아침 가능' },
+      { title: '비치 마켓', type: '스토어', distance: '도보 3분', description: '간단한 간식과 소모품을 채우기 좋은 편의 포인트.', tag: '준비물' },
+      { title: '만리포 카페라인', type: '카페', distance: '도보 6분', description: '해변을 보며 컨디션을 가볍게 체크하기 좋은 자리.', tag: '오션뷰' },
+    ],
+    specialInfo: ['서해권 체크 포인트', '기상 변화 빠름', '입수 전 면 상태 확인 권장', '겨울 수온 낮음'],
+  },
+  {
+    id: 'NAMYEOL',
+    name: '남열해수욕장',
+    region: '고흥',
+    locationLabel: '전남 고흥군',
+    placeCode: null,
+    lat: 34.57854,
+    lng: 127.487,
+    currentLevel: 'poor',
+    heroWeather: 'sunny',
+    summary: '남해권 원정 포인트로 매력은 있지만, 초보자라면 파도 크기보다 정돈 상태를 먼저 봐야 합니다.',
+    spotlight: '파도 간격은 괜찮아도 힘이 약하면 실제 체감은 기대보다 밋밋할 수 있어요.',
+    current: {
+      waveHeight: 0.5,
+      wavePeriod: 6.8,
+      windSpeed: 3.2,
+      waterTemp: 8.1,
+      weatherLabel: '겉보기보다 힘이 약해 보드가 잘 안 나갈 수 있어요',
+      recommendedTime: '현장 체크 추천',
+    },
+    skillNotes: {
+      beginner: '라인업이 넓어 보여도 실제 파도가 약하면 초보자는 타이밍만 놓치기 쉽습니다.',
+      intermediate: '주기와 바람이 맞는 날이면 생각보다 실속 있는 세션이 됩니다.',
+      advanced: '파워가 붙는 날을 기다리는 편이 만족도가 더 높습니다.',
+    },
+    localPicks: [
+      { title: '남열 해안국수', type: '식사', distance: '차량 7분', description: '해변 체크 후 따뜻하게 먹기 좋은 로컬 국수집.', tag: '로컬' },
+      { title: '서프체크 전망대', type: '뷰 포인트', distance: '도보 8분', description: '입수 전에 바람과 라인 상태를 보기 좋은 위치.', tag: '체크용' },
+      { title: '남열 미니마트', type: '스토어', distance: '차량 4분', description: '간단한 음료와 간식을 챙기기 편한 곳.', tag: '보급' },
+    ],
+    specialInfo: ['남해권 포인트', '현장 체크 중요', '장거리 이동 전 예보 비교 권장', '바람 방향 영향 큼'],
+  },
+  {
+    id: 'WOLJEONG',
+    name: '월정리해수욕장',
+    region: '제주',
+    locationLabel: '제주 제주시',
+    placeCode: null,
+    lat: 33.55598,
+    lng: 126.7978,
+    currentLevel: 'flat',
+    heroWeather: 'cloudy',
+    summary: '제주 동쪽에서 가볍게 체크할 수 있지만, 초보자 입수 카드로는 보수적으로 봐야 합니다.',
+    spotlight: '사진상 잔잔해 보여도 실제로는 파도 힘이 너무 약해 연습 효율이 낮을 수 있어요.',
+    current: {
+      waveHeight: 0.3,
+      wavePeriod: 4.6,
+      windSpeed: 3.8,
+      waterTemp: 13.0,
+      weatherLabel: '수면은 차분하지만 서핑용 에너지는 약한 편이에요',
+      recommendedTime: '플랜 B 권장',
+    },
+    skillNotes: {
+      beginner: '초보자도 무서움은 덜하지만 연습이 잘 되는 조건은 아닐 수 있어요.',
+      intermediate: '체크는 가능하지만 다른 포인트와 같이 비교하는 편이 좋습니다.',
+      advanced: '퍼포먼스 세션용으로 보긴 어렵습니다.',
+    },
+    localPicks: [
+      { title: '월정 브런치 바', type: '브런치', distance: '도보 4분', description: '입수 여부를 고민하면서 쉬기 좋은 해변 브런치 스팟.', tag: '뷰 좋음' },
+      { title: '동쪽 워시존', type: '편의', distance: '도보 3분', description: '간단히 몸 정리하고 이동하기 좋은 편의 포인트.', tag: '정비' },
+      { title: '월정 로스터리', type: '카페', distance: '도보 5분', description: '컨디션이 약할 때 플랜 B로 머물기 좋은 카페.', tag: '플랜B' },
+    ],
+    specialInfo: ['제주 동쪽 포인트', '파도 힘 약한 날 잦음', '플랫 체크 필요', '관광 동선과 함께 보기 좋음'],
   },
 ]
 
@@ -623,6 +718,65 @@ function buildApiSkillNote(items: SurfingApiItem[], skillLevel: SkillLevel) {
   return `${picked.predcNoonSeCd} 기준 ${picked.totalIndex} 컨디션입니다. 파고 ${picked.avgWvhgt.toFixed(1)}m, 파주기 ${picked.avgWvpd.toFixed(1)}초, 풍속 ${picked.avgWspd.toFixed(1)}m/s입니다.`
 }
 
+function buildBeginnerWaveReading(spot: ResolvedSpot): WaveReadingEntry[] {
+  const { waveHeight, wavePeriod, windSpeed, waterTemp } = spot.current
+  const heightGuide =
+    waveHeight < 0.2
+      ? '파도 높이가 매우 낮아 보드가 파도를 타고 앞으로 나가는 힘이 부족할 수 있어요. 평소보다 훨씬 많은 패들링이 필요합니다.'
+      : waveHeight < 0.4
+        ? '파도가 작아도 완전히 플랫한 상태는 아니지만, 초보자가 타기엔 추진력이 약할 수 있어요. 타이밍보다 패들링 유지가 더 중요합니다.'
+        : waveHeight < 0.8
+          ? '무릎에서 허리 아래 정도로 들어올 가능성이 있어 초보자가 겁먹을 정도는 아니에요. 대신 파도 힘이 약한지 먼저 보고 들어가면 좋습니다.'
+          : waveHeight < 1.3
+            ? '허리 안팎 높이로 들어와 초보자가 파도 타이밍을 연습하기에 비교적 읽기 쉬운 구간입니다. 너무 늦게 일어서지 않는 것이 핵심입니다.'
+            : '가슴 가까이 올라올 수 있어 초보자에게는 다소 부담스럽게 느껴질 수 있습니다. 입수 전 면 상태와 다른 서퍼 흐름을 먼저 보는 편이 안전합니다.'
+  const periodGuide =
+    wavePeriod < 5
+      ? '피리어드가 짧아 파도가 빨리 무너지기 쉬우니, 파도가 보일 때 이미 준비가 되어 있어야 합니다.'
+      : wavePeriod < 7
+        ? '피리어드가 아주 길진 않아서 여유는 짧지만, 리듬만 익히면 다음 파도 타이밍을 맞출 수 있습니다.'
+        : wavePeriod < 9
+          ? '피리어드가 비교적 길어 다음 파도가 다가오는 것을 여유롭게 보고 미리 라이딩을 준비하기 좋아요.'
+          : '피리어드가 길어 파도 간격은 좋지만, 들어오는 파도 힘도 함께 커질 수 있어 초보자는 포지션을 보수적으로 잡는 편이 좋습니다.'
+  const windGuide =
+    windSpeed >= 7
+      ? '바람이 강해서 수면이 많이 거칠 수 있습니다. 초보자는 보드 방향이 흔들릴 수 있어 입수 전에 면 상태를 꼭 확인해야 합니다.'
+      : windSpeed >= 4
+        ? '바람이 아주 세진 않지만 보드 방향이 흔들릴 수 있어, 첫 테이크오프에서 중심 잡는 데 신경 써야 합니다.'
+        : '바람이 강하지 않아 초보자가 파도 결을 읽기에 큰 문제가 없습니다.'
+  const waterGuide =
+    waterTemp < 8
+      ? '수온이 매우 낮아 4/3mm 이상 수트 착용이 필요합니다. 가능하면 부츠, 장갑, 후드도 함께 준비하는 편이 안전합니다.'
+      : waterTemp < 12
+        ? '수온이 낮은 편이라 4/3mm 수트나 보온 장비를 같이 준비하는 것이 좋습니다.'
+        : waterTemp < 17
+          ? '수온이 차가운 편이라 장시간 입수 시 체온이 빨리 떨어질 수 있습니다. 수트 착용 기준을 가볍게 보지 않는 편이 좋습니다.'
+          : '수온 부담은 비교적 덜하지만, 바람과 입수 시간을 함께 고려해 체온 관리를 하면 좋습니다.'
+
+  return [
+    {
+      label: '파도 높이',
+      value: `${waveHeight.toFixed(1)}m`,
+      description: heightGuide,
+    },
+    {
+      label: '피리어드',
+      value: `${wavePeriod.toFixed(1)}s`,
+      description: periodGuide,
+    },
+    {
+      label: '풍속',
+      value: `${windSpeed.toFixed(1)} m/s`,
+      description: windGuide,
+    },
+    {
+      label: '수온',
+      value: `${waterTemp.toFixed(1)}°C`,
+      description: waterGuide,
+    },
+  ]
+}
+
 function buildApiSpotSnapshot(spot: SpotBase, date: Date, items: SurfingApiItem[]): SpotSnapshot | null {
   const targetDate = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
   const targetItems = items.filter((item) => item.surfPlcNm === spot.name && item.predcYmd === targetDate)
@@ -756,6 +910,112 @@ function markerRadius(level: SurfLevel, active: boolean) {
   return active ? base + 3 : base
 }
 
+function WaveAnimation({
+  waveHeight,
+  wavePeriod,
+}: {
+  waveHeight: number
+  wavePeriod: number
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      return
+    }
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return
+    }
+
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const pixelRatio = window.devicePixelRatio > 1 ? 2 : 1
+    const amplitude = clamp(12 + waveHeight * 24, 12, 54)
+    const wavelength = clamp(110 + wavePeriod * 28, 160, 390)
+    const speed = clamp(0.3 + (9 - wavePeriod) * 0.035, 0.08, 0.36)
+
+    let animationFrame = 0
+    let width = 0
+    let height = 0
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect()
+      width = Math.max(rect.width, 240)
+      height = Math.max(rect.height, 132)
+      canvas.width = width * pixelRatio
+      canvas.height = height * pixelRatio
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    }
+
+    const draw = (time: number) => {
+      context.clearRect(0, 0, width, height)
+
+      const baseline = height * 0.62
+      const phase = motionQuery.matches ? 0 : time * 0.0012 * speed * Math.PI * 2
+      const gradient = context.createLinearGradient(0, baseline - amplitude, 0, height)
+      gradient.addColorStop(0, 'rgba(91, 201, 255, 0.96)')
+      gradient.addColorStop(1, 'rgba(16, 119, 194, 0.92)')
+
+      context.beginPath()
+      context.moveTo(0, height)
+
+      for (let x = 0; x <= width; x += 4) {
+        const y = baseline + Math.sin((x / wavelength) * Math.PI * 2 + phase) * amplitude
+        context.lineTo(x, y)
+      }
+
+      context.lineTo(width, height)
+      context.closePath()
+      context.fillStyle = gradient
+      context.fill()
+
+      context.beginPath()
+      for (let x = 0; x <= width; x += 4) {
+        const y = baseline + Math.sin((x / wavelength) * Math.PI * 2 + phase) * amplitude
+        if (x === 0) {
+          context.moveTo(x, y)
+        } else {
+          context.lineTo(x, y)
+        }
+      }
+      context.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+      context.lineWidth = 2
+      context.stroke()
+
+      if (!motionQuery.matches) {
+        animationFrame = window.requestAnimationFrame(draw)
+      }
+    }
+
+    resize()
+    const resizeObserver = new ResizeObserver(resize)
+    resizeObserver.observe(canvas)
+
+    if (motionQuery.matches) {
+      draw(0)
+    } else {
+      animationFrame = window.requestAnimationFrame(draw)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+      window.cancelAnimationFrame(animationFrame)
+    }
+  }, [waveHeight, wavePeriod])
+
+  return (
+    <div className="wave-animation-shell">
+      <canvas ref={canvasRef} className="wave-animation-canvas" aria-hidden="true" />
+      <div className="wave-animation-meta">
+        <span>파도 높이 {waveHeight.toFixed(1)}m</span>
+        <span>피리어드 {wavePeriod.toFixed(1)}s</span>
+      </div>
+    </div>
+  )
+}
+
 function buildMarkerNodes(spots: ResolvedSpot[], zoom: number): MarkerNode[] {
   if (zoom > 7) {
     return spots.map((spot) => ({ kind: 'spot', spot }))
@@ -763,10 +1023,11 @@ function buildMarkerNodes(spots: ResolvedSpot[], zoom: number): MarkerNode[] {
 
   const eastGroup = spots.filter((spot) => ['SR3', 'SR4', 'SR12'].includes(spot.id))
   const southeastGroup = spots.filter((spot) => ['SR1', 'SR6', 'SR7'].includes(spot.id))
-  const jejuGroup = spots.filter((spot) => ['SR10'].includes(spot.id))
+  const jejuGroup = spots.filter((spot) => ['SR10', 'WOLJEONG'].includes(spot.id))
+  const groupedIds = new Set([...eastGroup, ...southeastGroup, ...jejuGroup].map((spot) => spot.id))
 
   const clusters = [eastGroup, southeastGroup, jejuGroup]
-    .filter((group) => group.length > 0)
+    .filter((group) => group.length > 1)
     .map((group) => ({
       kind: 'cluster' as const,
       id: `cluster-${group.map((spot) => spot.id).join('-')}`,
@@ -776,7 +1037,11 @@ function buildMarkerNodes(spots: ResolvedSpot[], zoom: number): MarkerNode[] {
       label: `${group.length}곳`,
     }))
 
-  return clusters
+  const standaloneSpots = spots
+    .filter((spot) => !groupedIds.has(spot.id))
+    .map((spot) => ({ kind: 'spot' as const, spot }))
+
+  return [...standaloneSpots, ...clusters]
 }
 
 type DetailTab = 'weekly-forecast' | 'nearby' | 'tips'
@@ -1015,7 +1280,6 @@ function App() {
   const serviceKey = getSurfingApiKey()
  const [screenMode, setScreenMode] = useState<ScreenMode>("dashboard")
   const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
-  const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [selectedDate, setSelectedDate] = useState(today)
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
@@ -1046,6 +1310,7 @@ function App() {
   )
   const selectedSpotIndex = resolvedSpots.findIndex((spot) => spot.id === selectedSpot.id)
   const markerNodes = useMemo(() => buildMarkerNodes(resolvedSpots, mapZoom), [resolvedSpots, mapZoom])
+  const beginnerWaveReading = useMemo(() => buildBeginnerWaveReading(selectedSpot), [selectedSpot])
 
   const mapStyle = {
     '--focus-x': `${selectedSpot.lng > 128 ? 70 : selectedSpot.lng < 127 ? 28 : 54}%`,
@@ -1055,7 +1320,6 @@ function App() {
   const handleSpotSelect = (spotId: string) => {
     startTransition(() => {
       setSelectedSpotId(spotId)
-      setSelectedSkill('beginner')
     })
   }
 
@@ -1209,7 +1473,7 @@ function App() {
               </div>
               <div className="insight-metrics">
                 <div>
-                  <span className="label">파고</span>
+                  <span className="label">파도 높이</span>
                   <strong>{selectedSpot.current.waveHeight} m</strong>
                 </div>
                 <div>
@@ -1367,11 +1631,11 @@ function App() {
 
             <section className="panel-grid current-grid">
               <div className="info-card">
-                <span className="label">현재 파고</span>
+                <span className="label">현재 파도 높이</span>
                 <strong>{selectedSpot.current.waveHeight} m</strong>
               </div>
               <div className="info-card">
-                <span className="label">파주기</span>
+                <span className="label">피리어드</span>
                 <strong>{selectedSpot.current.wavePeriod} s</strong>
               </div>
               <div className="info-card">
@@ -1388,24 +1652,27 @@ function App() {
               <div className="section-heading compact">
                 <div>
                   <p className="eyebrow">{relativeDateLabel}의 판단</p>
-                  <h3>실력별 추천 한 줄</h3>
+                  <h3>오늘의 파도</h3>
                 </div>
               </div>
-              <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
-                {skillLevels.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={selectedSkill === level ? 'is-selected' : ''}
-                    onClick={() => setSelectedSkill(level)}
-                  >
-                    {skillLabel[level]}
-                  </button>
-                ))}
+              <div className="wave-animation-slot" aria-label="파도 애니메이션 자리">
+                <WaveAnimation
+                  waveHeight={selectedSpot.current.waveHeight}
+                  wavePeriod={selectedSpot.current.wavePeriod}
+                />
               </div>
               <div className="narrative-card">
-                <span className="label">{relativeDateLabel}의 해석</span>
-                <p>{selectedSpot.skillNotes[selectedSkill]}</p>
+                <span className="label">오늘의 파도 읽기</span>
+                <div className="wave-reading-list">
+                  {beginnerWaveReading.map((entry) => (
+                    <p key={entry.label} className="wave-reading-item">
+                      <strong>
+                        {entry.label} {entry.value}:
+                      </strong>{' '}
+                      {entry.description}
+                    </p>
+                  ))}
+                </div>
               </div>
             </section>
 
