@@ -759,6 +759,11 @@
  min-width: 16rem;
 }
 
+.detail-hero-side .hero-level {
+ font-size: 1.5rem;
+ padding: 0.9rem 1.5rem;
+}
+
 .detail-coordinate-card {
  display: grid;
  gap: 0.3rem;
@@ -1037,6 +1042,29 @@
  padding: 1rem 1.05rem;
  border-radius: 1.2rem;
 }
+.segment-control {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  margin-bottom: 0.85rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(225, 241, 251, 0.65);
+}
+
+.segment-control button {
+  min-height: 2.6rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text);
+  background: transparent;
+}
+
+.segment-control button.is-selected {
+  background: rgba(67, 213, 255, 0.24);
+}
+
 .narrative-card,
 .detail-card {
   padding: 1rem 1.05rem;
