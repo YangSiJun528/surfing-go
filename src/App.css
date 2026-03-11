@@ -104,7 +104,8 @@
 .forecast-card,
 .detail-card,
 .narrative-card,
-.local-card {
+.local-card,
+.forecast-list-row {
   border: 1px solid var(--line);
   backdrop-filter: blur(18px);
   background: var(--panel);
@@ -509,6 +510,83 @@
   color: var(--text);
 }
 
+.forecast-summary-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.forecast-detail {
+  margin-top: 0.85rem;
+}
+
+.ghost-button {
+  padding: 0.65rem 1rem;
+  border: 1px solid rgba(85, 142, 181, 0.18);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(231, 244, 251, 0.82);
+}
+
+.ghost-button:hover {
+  background: rgba(210, 237, 250, 0.96);
+}
+
+.forecast-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.forecast-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1.2rem;
+}
+
+.forecast-row-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.forecast-row-copy strong,
+.forecast-index-text {
+  font-size: 1rem;
+}
+
+.forecast-row-copy span {
+  color: var(--muted);
+}
+
+.forecast-index-very-good {
+  border-color: rgba(77, 225, 209, 0.28);
+  background: rgba(77, 225, 209, 0.16);
+}
+
+.forecast-index-good {
+  border-color: rgba(88, 182, 255, 0.28);
+  background: rgba(88, 182, 255, 0.14);
+}
+
+.forecast-index-fair {
+  border-color: rgba(244, 201, 93, 0.3);
+  background: rgba(244, 201, 93, 0.16);
+}
+
+.forecast-index-poor {
+  border-color: rgba(255, 139, 97, 0.28);
+  background: rgba(255, 139, 97, 0.15);
+}
+
+.forecast-index-flat {
+  border-color: rgba(252, 95, 127, 0.28);
+  background: rgba(252, 95, 127, 0.14);
+}
+
 @keyframes pulse {
   0% {
     transform: scale(0.8);
@@ -573,7 +651,9 @@
   .insight-strip,
   .sidebar-hero,
   .detail-title,
-  .local-head {
+  .local-head,
+  .forecast-summary-card,
+  .forecast-list-row {
     flex-direction: column;
     align-items: flex-start;
   }

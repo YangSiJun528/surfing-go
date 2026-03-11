@@ -5,6 +5,7 @@ import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
+import { forecastIndexClass, forecastItems, formatForecastDate, skillGradeLabel, sortForecastItems } from './forecast'
 
 type SurfLevel = 'very-good' | 'good' | 'fair' | 'poor' | 'flat'
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -425,9 +426,35 @@ function buildMarkerNodes(spots: Spot[], zoom: number): MarkerNode[] {
   return clusters
 }
 
+function SkillLevelTabs({
+  selectedSkill,
+  onSelect,
+  ariaLabel,
+}: {
+  selectedSkill: SkillLevel
+  onSelect: (level: SkillLevel) => void
+  ariaLabel: string
+}) {
+  return (
+    <div className="segment-control" role="tablist" aria-label={ariaLabel}>
+      {skillLevels.map((level) => (
+        <button
+          key={level}
+          type="button"
+          className={selectedSkill === level ? 'is-selected' : ''}
+          onClick={() => onSelect(level)}
+        >
+          {skillLabel[level]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function App() {
   const [selectedSpotId, setSelectedSpotId] = useState(spots[0].id)
   const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
+  const [isForecastExpanded, setIsForecastExpanded] = useState(false)
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<any>(null)
 
@@ -436,6 +463,17 @@ function App() {
     [selectedSpotId],
   )
   const markerNodes = useMemo(() => buildMarkerNodes(spots, mapZoom), [mapZoom])
+  const weeklyForecastItems = useMemo(
+    () =>
+      sortForecastItems(
+        forecastItems.filter(
+          (item) =>
+            item.placeCode === selectedSpot.placeCode &&
+            item.grdCn === skillGradeLabel[selectedSkill],
+        ),
+      ),
+    [selectedSkill, selectedSpot.placeCode],
+  )
 
   const mapStyle = {
     '--focus-x': `${selectedSpot.lng > 128 ? 70 : selectedSpot.lng < 127 ? 28 : 54}%`,
@@ -446,6 +484,7 @@ function App() {
     startTransition(() => {
       setSelectedSpotId(spotId)
       setSelectedSkill('beginner')
+      setIsForecastExpanded(false)
     })
   }
 
@@ -636,25 +675,66 @@ function App() {
                 <h3>실력별 추천 한 줄</h3>
               </div>
             </div>
-            <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
-              {skillLevels.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  className={selectedSkill === level ? 'is-selected' : ''}
-                  onClick={() => setSelectedSkill(level)}
+            <SkillLevelTabs
+            selectedSkill={selectedSkill}
+            onSelect={setSelectedSkill}
+            ariaLabel="실력 레벨 선택"
+          />
+        <div className="narrative-card">
+          <span className="label">오늘의 해석</span>
+          <p>{selectedSpot.skillNotes[selectedSkill]}</p>
+        </div>
+      </section>
+
+      <section className="panel-section">
+        <div className="section-heading compact">
+          <div>
+            <p className="eyebrow">해당 스팟 기준</p>
+            <h3>일주일 예보</h3>
+          </div>
+        </div>
+        <div className="detail-card forecast-summary-card">
+          <div>
+            <span className="label">표시 방식</span>
+            <p>{selectedSpot.name} 기준으로 가까운 3일은 오전/오후, 이후 4일은 일 단위로 보여줘요.</p>
+          </div>
+          <button
+            type="button"
+            className="ghost-button"
+            aria-expanded={isForecastExpanded}
+            onClick={() => setIsForecastExpanded((expanded) => !expanded)}
+          >
+            {isForecastExpanded ? '상세 접기' : '상세 보기'}
+          </button>
+        </div>
+
+        {isForecastExpanded ? (
+          <div className="forecast-detail">
+            <SkillLevelTabs
+              selectedSkill={selectedSkill}
+              onSelect={setSelectedSkill}
+              ariaLabel="일주일 예보 실력 레벨 선택"
+            />
+            <div className="forecast-list" role="list" aria-label="일주일 예보 리스트">
+              {weeklyForecastItems.map((item) => (
+                <article
+                  key={`${item.placeCode}-${item.grdCn}-${item.predcYmd}-${item.predcNoonSeCd}`}
+                  className={`forecast-list-row ${forecastIndexClass(item.totalIndex)}`}
+                  role="listitem"
                 >
-                  {skillLabel[level]}
-                </button>
+                  <div className="forecast-row-copy">
+                    <strong>{formatForecastDate(item.predcYmd)}</strong>
+                    <span>{item.predcNoonSeCd}</span>
+                  </div>
+                  <strong className="forecast-index-text">{item.totalIndex}</strong>
+                </article>
               ))}
             </div>
-            <div className="narrative-card">
-              <span className="label">오늘의 해석</span>
-              <p>{selectedSpot.skillNotes[selectedSkill]}</p>
-            </div>
-          </section>
+          </div>
+        ) : null}
+      </section>
 
-          <section className="panel-section">
+      <section className="panel-section">
             <div className="section-heading compact">
               <div>
                 <p className="eyebrow">오늘 컨디션 요약</p>
