@@ -74,7 +74,6 @@ const koreaMaxBounds: LatLngBoundsExpression = [
   [39.5, 132.0],
 ]
 const weekdayFormatter = new Intl.DateTimeFormat('ko-KR', { weekday: 'short' })
-const forecastDateFormatter = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' })
 const today = startOfDay(new Date())
 
 const levelLabel: Record<SurfLevel, string> = {
@@ -762,13 +761,10 @@ function App() {
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
   const [apiItems, setApiItems] = useState<SurfingApiItem[]>([])
   const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
-  const [dataSource, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
   const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
-  const [forecastDate, setForecastDate] = useState<string | null>(null)
 
   const selectedDateOffset = diffCalendarDays(selectedDate, today)
   const relativeDateLabel = formatRelativeDateLabel(selectedDate)
-  const absoluteDateLabel = formatAbsoluteDate(selectedDate)
 
   const resolvedSpots = useMemo(
     () =>
@@ -851,8 +847,6 @@ function App() {
 
         setApiItems(result.items)
         setDataStatus('ready')
-        setDataSource(result.source)
-        setForecastDate(result.items[0]?.predcYmd ?? null)
         setDataMessage(result.source === 'cache' ? '저장된 API 응답을 재사용했습니다.' : '실시간 API 응답을 반영했습니다.')
       })
       .catch((error: unknown) => {
@@ -862,8 +856,6 @@ function App() {
 
         setApiItems([])
         setDataStatus('fallback')
-        setDataSource('demo')
-        setForecastDate(null)
         setDataMessage(error instanceof Error ? `${error.message}. 데모 데이터로 전환했습니다.` : 'API 호출에 실패해 데모 데이터를 표시합니다.')
       })
 
@@ -872,39 +864,13 @@ function App() {
     }
   }, [serviceKey])
 
-  const sourceLabel = dataSource === 'network' ? '실시간 API' : dataSource === 'cache' ? '저장된 응답' : '데모 데이터'
-  const forecastLabel = forecastDate ? forecastDateFormatter.format(new Date(`${forecastDate}T00:00:00`)) : formatDateWithWeekday(selectedDate)
-
   return (
     <div className={`app-shell ${weatherClass(selectedSpot.heroWeather)}`}>
       <div className="background-aurora" />
       <div className="background-grid" />
 
       <header className="topbar">
-        <div>
-          <p className="eyebrow">서핑 API 연동 대시보드</p>
-          <h1>국립해양조사원 서핑지수를 날짜 네비게이션 UI와 함께 탐색합니다.</h1>
-          <p className="topbar-copy">{dataMessage}</p>
-        </div>
-        <div className="topbar-meta">
-          <div className="meta-pill">
-            <span className="meta-label">선택 날짜</span>
-            <strong>{absoluteDateLabel}</strong>
-            <span>{weekdayFormatter.format(selectedDate)} · {relativeDateLabel}</span>
-          </div>
-          <div className="meta-pill">
-            <span className="meta-label">예보 기준일</span>
-            <strong>{forecastLabel}</strong>
-          </div>
-          <div className="meta-pill">
-            <span className="meta-label">데이터 소스</span>
-            <strong>{sourceLabel}</strong>
-          </div>
-          <div className={`meta-pill level-pill ${levelClass(selectedSpot.currentLevel)}`}>
-            <span className="meta-label">선택 포인트</span>
-            <strong>{selectedSpot.name}</strong>
-          </div>
-        </div>
+        <h1>서핑고</h1>
       </header>
 
       <main className="dashboard">
