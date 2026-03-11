@@ -21,6 +21,8 @@ type LocalCard = {
   distance: string
   description: string
   tag: string
+  address?: string
+  operatingHours?: string
 }
 
 type SpotCurrent = {
@@ -64,6 +66,7 @@ type ResolvedSpot = Omit<SpotBase, 'currentLevel' | 'heroWeather' | 'summary' | 
 type MarkerNode =
   | { kind: 'spot'; spot: ResolvedSpot }
   | { kind: 'cluster'; id: string; spots: ResolvedSpot[]; lat: number; lng: number; label: string }
+type ScreenMode = "dashboard" | "spot-detail"
 
 const DAY_RANGE = 7
 const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
@@ -117,9 +120,9 @@ const baseSpots: SpotBase[] = [
       advanced: '퍼포먼스 데이보다는 가볍게 푸는 세션에 가까워요.',
     },
     localPicks: [
-      { title: '웨이브 토스트 클럽', type: '브런치', distance: '도보 4분', description: '입수 전 빠르게 먹기 좋은 토스트와 커피.', tag: '오픈 빠름' },
-      { title: '블루보드 렌탈', type: '렌탈', distance: '도보 1분', description: '초보자용 보드와 슈트 대여가 편한 샵.', tag: '입문 친화' },
-      { title: '문라이트 국밥', type: '식사', distance: '차량 8분', description: '세션 뒤 따뜻하게 마무리하기 좋은 현지 식당.', tag: '로컬 픽' },
+      { title: '웨이브 토스트 클럽', type: '브런치', distance: '도보 4분', description: '입수 전 빠르게 먹기 좋은 토스트와 커피.', tag: '오픈 빠름', address: '부산 해운대구 송정해변로 32', operatingHours: '매일 08:00 - 18:00' },
+      { title: '블루보드 렌탈', type: '렌탈', distance: '도보 1분', description: '초보자용 보드와 슈트 대여가 편한 샵.', tag: '입문 친화', address: '부산 해운대구 송정중동 123-45', operatingHours: '매일 07:00 - 19:00 (계절 변동)' },
+      { title: '문라이트 국밥', type: '식사', distance: '차량 8분', description: '세션 뒤 따뜻하게 마무리하기 좋은 현지 식당.', tag: '로컬 픽', address: '부산 해운대구 송정동 78-3', operatingHours: '매일 06:00 - 21:00' },
     ],
     specialInfo: ['주차장 접근 쉬움', '샤워 가능', '보드 대여 가능', '점심 이후 혼잡'],
   },
@@ -148,9 +151,9 @@ const baseSpots: SpotBase[] = [
       advanced: '깨끗한 숄더를 고르면 짧은 퍼포먼스 턴도 가능합니다.',
     },
     localPicks: [
-      { title: '브레이크라인 커피', type: '카페', distance: '도보 2분', description: '라인업이 보이는 창가 좌석이 인기인 카페.', tag: '오션뷰' },
-      { title: '죽도 생선구이', type: '식사', distance: '도보 6분', description: '세션 뒤 든든하게 먹기 좋은 생선구이 정식.', tag: '단백질' },
-      { title: '이스트클리프 사우나', type: '회복', distance: '차량 9분', description: '찬 수온 뒤 몸 풀기 좋은 온탕과 사우나.', tag: '온수 샤워' },
+      { title: '브레이크라인 커피', type: '카페', distance: '도보 2분', description: '라인업이 보이는 창가 좌석이 인기인 카페.', tag: '오션뷰', address: '강원 양양군 현남면 죽도해변로 112', operatingHours: '매일 09:00 - 20:00' },
+      { title: '죽도 생선구이', type: '식사', distance: '도보 6분', description: '세션 뒤 든든하게 먹기 좋은 생선구이 정식.', tag: '단백질', address: '강원 양양군 현남면 죽도리 234', operatingHours: '매일 11:00 - 21:00' },
+      { title: '이스트클리프 사우나', type: '회복', distance: '차량 9분', description: '찬 수온 뒤 몸 풀기 좋은 온탕과 사우나.', tag: '온수 샤워', address: '강원 양양군 현남면 인구리 56', operatingHours: '매일 06:00 - 24:00' },
     ],
     specialInfo: ['주차는 이른 시간 추천', '중들물 타이밍 강함', '수온 낮아 슈트 권장', '일출 포인트'],
   },
@@ -179,9 +182,9 @@ const baseSpots: SpotBase[] = [
       advanced: '원정 가치가 높지는 않은 날입니다.',
     },
     localPicks: [
-      { title: '항구칼국수', type: '식사', distance: '차량 5분', description: '짧은 세션 뒤 빠르게 먹기 좋은 국수집.', tag: '가성비' },
-      { title: '파인트리 마트', type: '스토어', distance: '도보 4분', description: '간식과 왁스를 빠르게 채우기 좋아요.', tag: '준비물' },
-      { title: '샌드라인 카페', type: '카페', distance: '도보 7분', description: '라인업을 바라보며 쉬기 좋은 카페.', tag: '작업 가능' },
+      { title: '항구칼국수', type: '식사', distance: '차량 5분', description: '짧은 세션 뒤 빠르게 먹기 좋은 국수집.', tag: '가성비', address: '강원 동해시 망상해변로 45', operatingHours: '매일 08:00 - 20:00' },
+      { title: '파인트리 마트', type: '스토어', distance: '도보 4분', description: '간식과 왁스를 빠르게 채우기 좋아요.', tag: '준비물', address: '강원 동해시 망상동 67-2', operatingHours: '매일 07:00 - 22:00' },
+      { title: '샌드라인 카페', type: '카페', distance: '도보 7분', description: '라인업을 바라보며 쉬기 좋은 카페.', tag: '작업 가능', address: '강원 동해시 망상해수욕장 앞', operatingHours: '매일 09:00 - 19:00' },
     ],
     specialInfo: ['해변 진입 편함', '주차 여유 있음', '바람 노출 큼', '양양보다 덜 붐빔'],
   },
@@ -210,9 +213,9 @@ const baseSpots: SpotBase[] = [
       advanced: '바깥 라인을 고르면 가볍게 턴을 넣기 좋습니다.',
     },
     localPicks: [
-      { title: '브레이크워터 타코', type: '식사', distance: '도보 3분', description: '짧은 브레이크 타임에도 먹기 좋은 간단한 메뉴.', tag: '빠른 식사' },
-      { title: '금진 로스터리', type: '카페', distance: '도보 6분', description: '한적하게 쉬기 좋은 동네 로스터리.', tag: '한적함' },
-      { title: '솔트하우스 스테이', type: '숙소', distance: '차량 10분', description: '주말 서핑 베이스로 쓰기 좋은 소형 숙소.', tag: '주말용' },
+      { title: '브레이크워터 타코', type: '식사', distance: '도보 3분', description: '짧은 브레이크 타임에도 먹기 좋은 간단한 메뉴.', tag: '빠른 식사', address: '강원 강릉시 사천면 금진해변로 23', operatingHours: '매일 10:00 - 21:00' },
+      { title: '금진 로스터리', type: '카페', distance: '도보 6분', description: '한적하게 쉬기 좋은 동네 로스터리.', tag: '한적함', address: '강원 강릉시 사천면 금진리 89', operatingHours: '매일 08:00 - 18:00' },
+      { title: '솔트하우스 스테이', type: '숙소', distance: '차량 10분', description: '주말 서핑 베이스로 쓰기 좋은 소형 숙소.', tag: '주말용', address: '강원 강릉시 사천면 해변로 156', operatingHours: '체크인 15:00 / 체크아웃 11:00' },
     ],
     specialInfo: ['라인업 한적함', '주말 여행 적합', '야간 교통은 제한적', '로컬 샵 소규모 운영'],
   },
@@ -241,9 +244,9 @@ const baseSpots: SpotBase[] = [
       advanced: '파워는 크지 않지만 속도감 있는 세션은 가능합니다.',
     },
     localPicks: [
-      { title: '하버 라이스볼', type: '식사', distance: '도보 5분', description: '짧은 대기와 깔끔한 해산물 덮밥으로 유명합니다.', tag: '빠른 회전' },
-      { title: '진하 서프하우스', type: '렌탈', distance: '도보 2분', description: '레슨, 보드, 락커를 한 번에 해결할 수 있어요.', tag: '레슨 가능' },
-      { title: '선레일 카페', type: '카페', distance: '도보 7분', description: '해질 무렵 테라스 자리가 좋은 카페.', tag: '노을 포인트' },
+      { title: '하버 라이스볼', type: '식사', distance: '도보 5분', description: '짧은 대기와 깔끔한 해산물 덮밥으로 유명합니다.', tag: '빠른 회전', address: '울산 울주군 서생면 진하해변로 78', operatingHours: '매일 09:00 - 21:00' },
+      { title: '진하 서프하우스', type: '렌탈', distance: '도보 2분', description: '레슨, 보드, 락커를 한 번에 해결할 수 있어요.', tag: '레슨 가능', address: '울산 울주군 서생면 진하해수욕장 인근', operatingHours: '매일 06:00 - 19:00' },
+      { title: '선레일 카페', type: '카페', distance: '도보 7분', description: '해질 무렵 테라스 자리가 좋은 카페.', tag: '노을 포인트', address: '울산 울주군 서생면 진하리 234', operatingHours: '매일 10:00 - 22:00' },
     ],
     specialInfo: ['초급 진입 쉬움', '락커 인접', '평일 한산함', '가족형 편의시설'],
   },
@@ -272,9 +275,9 @@ const baseSpots: SpotBase[] = [
       advanced: '형태가 약해 세션 메리트가 거의 없습니다.',
     },
     localPicks: [
-      { title: '선셋시장 호빵', type: '간식', distance: '도보 6분', description: '바람 센 날 뜨끈하게 먹기 좋은 간식.', tag: '저예산' },
-      { title: '하구 자전거 포인트', type: '대안 코스', distance: '도보 3분', description: '파도가 약할 때 산책이나 자전거로 전환하기 좋습니다.', tag: '플랜B' },
-      { title: '갯벌 씨푸드홀', type: '식사', distance: '차량 10분', description: '여럿이 같이 가기 좋은 푸짐한 메뉴 구성.', tag: '단체 적합' },
+      { title: '선셋시장 호빵', type: '간식', distance: '도보 6분', description: '바람 센 날 뜨끈하게 먹기 좋은 간식.', tag: '저예산', address: '부산 사하구 다대동 해변로 45', operatingHours: '매일 08:00 - 20:00' },
+      { title: '하구 자전거 포인트', type: '대안 코스', distance: '도보 3분', description: '파도가 약할 때 산책이나 자전거로 전환하기 좋습니다.', tag: '플랜B', address: '부산 사하구 다대포해수욕장 인근', operatingHours: '24시간 개방' },
+      { title: '갯벌 씨푸드홀', type: '식사', distance: '차량 10분', description: '여럿이 같이 가기 좋은 푸짐한 메뉴 구성.', tag: '단체 적합', address: '부산 사하구 몰운대동 12-3', operatingHours: '매일 11:00 - 22:00' },
     ],
     specialInfo: ['해변 산책 넓음', '바람 영향 큼', '노을 뷰 우수', '파도 일관성 낮음'],
   },
@@ -303,9 +306,9 @@ const baseSpots: SpotBase[] = [
       advanced: '오늘 가장 퍼포먼스 지향적인 포인트예요.',
     },
     localPicks: [
-      { title: '바솔트 브런치', type: '브런치', distance: '차량 7분', description: '오션 테라스가 인상적인 제주권 브런치 장소.', tag: '프리미엄' },
-      { title: '클리프라인 샤워클럽', type: '회복', distance: '차량 5분', description: '당일치기 서퍼에게 편한 온수 샤워와 건조 공간.', tag: '편의성' },
-      { title: '색달 흑돼지', type: '식사', distance: '차량 9분', description: '세션 뒤 만족도가 높은 제주식 저녁 코스.', tag: '시그니처' },
+      { title: '바솔트 브런치', type: '브런치', distance: '차량 7분', description: '오션 테라스가 인상적인 제주권 브런치 장소.', tag: '프리미엄', address: '제주 서귀포시 중문동 2345', operatingHours: '매일 09:00 - 18:00' },
+      { title: '클리프라인 샤워클럽', type: '회복', distance: '차량 5분', description: '당일치기 서퍼에게 편한 온수 샤워와 건조 공간.', tag: '편의성', address: '제주 서귀포시 색달해변로 12', operatingHours: '매일 07:00 - 20:00' },
+      { title: '색달 흑돼지', type: '식사', distance: '차량 9분', description: '세션 뒤 만족도가 높은 제주식 저녁 코스.', tag: '시그니처', address: '제주 서귀포시 중문동 678', operatingHours: '매일 12:00 - 22:00' },
     ],
     specialInfo: ['파도 에너지 강함', '자신감 있는 라이더에게 적합', '시각적으로 가장 화려함', '관광객 교통 고려'],
   },
@@ -711,6 +714,21 @@ function ClusterMarker({
   )
 }
 
+const DETAIL_MAP_ZOOM = 11
+
+function DetailMapController({ spot }: { spot: ResolvedSpot }) {
+  const map = useMap()
+
+  useEffect(() => {
+    map.flyTo([spot.lat, spot.lng], DETAIL_MAP_ZOOM, {
+      animate: true,
+      duration: 0.8,
+    })
+  }, [map, spot.lat, spot.lng])
+
+  return null
+}
+
 function markerRadius(level: SurfLevel, active: boolean) {
   const base = (() => {
     switch (level) {
@@ -753,8 +771,241 @@ function buildMarkerNodes(spots: ResolvedSpot[], zoom: number): MarkerNode[] {
   return clusters
 }
 
+type DetailTab = 'weekly-forecast' | 'nearby' | 'tips'
+
+function SpotDetailPage({
+ spot,
+ baseSpot,
+ apiItems,
+ southKoreaGeoJson,
+ relativeDateLabel,
+ absoluteDateLabel,
+ forecastLabel,
+ sourceLabel,
+ onBack,
+}: {
+ spot: ResolvedSpot
+ baseSpot: SpotBase
+ apiItems: SurfingApiItem[]
+ southKoreaGeoJson: Feature<Geometry, { name?: string }> | null
+ relativeDateLabel: string
+ absoluteDateLabel: string
+ forecastLabel: string
+ sourceLabel: string
+ onBack: () => void
+}) {
+ const [activeTab, setActiveTab] = useState<DetailTab>('weekly-forecast')
+ const [selectedNearbyPlace, setSelectedNearbyPlace] = useState<LocalCard | null>(null)
+
+ const weekForecast = useMemo(() => {
+   const spotIndex = baseSpots.findIndex((s) => s.id === baseSpot.id)
+   return Array.from({ length: 7 }, (_, i) => {
+     const date = addDays(today, i)
+     const apiSnapshot = buildApiSpotSnapshot(baseSpot, date, apiItems)
+     const snapshot = apiSnapshot ?? buildMockSpotSnapshot(baseSpot, date, spotIndex >= 0 ? spotIndex : 0)
+     return {
+       date,
+       dateLabel: formatAbsoluteDate(date),
+       weekdayLabel: weekdayFormatter.format(date),
+       relativeLabel: formatRelativeDateLabel(date),
+       level: snapshot.currentLevel,
+     }
+   })
+ }, [baseSpot, apiItems])
+
+ return (
+ <main className="detail-page">
+ <section className="section-card detail-page-header">
+ <button type="button" className="detail-back-button" onClick={onBack}>
+ 뒤로 가기
+ </button>
+ <div className="detail-page-meta">
+ <div className="meta-pill">
+ <span className="meta-label">선택 날짜</span>
+ <strong>{absoluteDateLabel}</strong>
+ <span>{relativeDateLabel}</span>
+ </div>
+ <div className="meta-pill">
+ <span className="meta-label">예보 기준일</span>
+ <strong>{forecastLabel}</strong>
+ </div>
+ <div className="meta-pill">
+ <span className="meta-label">데이터 소스</span>
+ <strong>{sourceLabel}</strong>
+ </div>
+ </div>
+ </section>
+
+ <section className="section-card detail-hero-card">
+ <div className="detail-hero-copy">
+ <p className="eyebrow">{spot.region} 포인트</p>
+ <h1>{spot.name} 상세</h1>
+ <p className="detail-hero-summary">{spot.summary}</p>
+ <p className="detail-hero-spotlight">{spot.spotlight}</p>
+ </div>
+ <div className="detail-hero-side">
+ <span className={"hero-level " + levelClass(spot.currentLevel)}>{levelLabel[spot.currentLevel]}</span>
+ <div className="detail-coordinate-card">
+ <span className="label">위치 코드</span>
+ <strong>{spot.placeCode ? spot.region + " · " + spot.placeCode : spot.region + " · 코드 미확인"}</strong>
+ <span>위도 {spot.lat.toFixed(3)} · 경도 {spot.lng.toFixed(3)}</span>
+ </div>
+ </div>
+ </section>
+
+ <div className="detail-layout">
+ <section className="section-card detail-section detail-left-tabbed">
+ <div className="detail-tabs" role="tablist" aria-label="상세 보기 탭">
+ <button
+ type="button"
+ role="tab"
+ aria-selected={activeTab === 'weekly-forecast'}
+ className={activeTab === 'weekly-forecast' ? 'is-selected' : ''}
+ onClick={() => { setActiveTab('weekly-forecast'); setSelectedNearbyPlace(null) }}
+ >
+ 일주일 예보
+ </button>
+ <button
+ type="button"
+ role="tab"
+ aria-selected={activeTab === 'nearby'}
+ className={activeTab === 'nearby' ? 'is-selected' : ''}
+ onClick={() => setActiveTab('nearby')}
+ >
+ 근처 장소
+ </button>
+ <button
+ type="button"
+ role="tab"
+ aria-selected={activeTab === 'tips'}
+ className={activeTab === 'tips' ? 'is-selected' : ''}
+ onClick={() => { setActiveTab('tips'); setSelectedNearbyPlace(null) }}
+ >
+ 서핑팁
+ </button>
+ </div>
+ <div className="detail-tab-panel">
+ {activeTab === 'weekly-forecast' && (
+ <div className="week-forecast-list">
+ {weekForecast.map((day) => (
+ <article
+ key={day.date.getTime()}
+ className={`week-forecast-day level-bg-${day.level}`}
+ >
+ <span className="week-forecast-date">{day.dateLabel}</span>
+ <span className="week-forecast-weekday">{day.weekdayLabel} · {day.relativeLabel}</span>
+ <strong className="week-forecast-level">{levelLabel[day.level]}</strong>
+ </article>
+ ))}
+ </div>
+ )}
+ {activeTab === 'nearby' && (
+ <div className="nearby-place-list">
+ {spot.localPicks.map((place) => (
+ <button
+ key={place.title}
+ type="button"
+ className={`nearby-place-card ${selectedNearbyPlace?.title === place.title ? 'is-selected' : ''}`}
+ onClick={() => setSelectedNearbyPlace(place)}
+ >
+ <span className="nearby-place-type">{place.type}</span>
+ <strong className="nearby-place-title">{place.title}</strong>
+ <span className="nearby-place-distance">{place.distance}</span>
+ </button>
+ ))}
+ </div>
+ )}
+ {activeTab === 'tips' && (
+ <p className="detail-tab-placeholder">서핑팁이 곧 제공됩니다.</p>
+ )}
+ </div>
+ </section>
+
+ <div className="detail-right-column">
+ <section className="section-card detail-section detail-map-card">
+ <div className="detail-map-stage">
+ <MapContainer
+ center={[spot.lat, spot.lng]}
+ zoom={DETAIL_MAP_ZOOM}
+ minZoom={8}
+ maxZoom={14}
+ maxBounds={koreaMaxBounds}
+ zoomControl={false}
+ attributionControl={false}
+ className="leaflet-map detail-leaflet-map"
+ >
+ {southKoreaGeoJson ? (
+ <GeoJSON
+ data={southKoreaGeoJson}
+ interactive={false}
+ style={() => ({
+ color: 'rgba(255,255,255,0.72)',
+ weight: 1.4,
+ fillColor: '#cfd8de',
+ fillOpacity: 0.94,
+ })}
+ />
+ ) : null}
+ <CircleMarker
+ center={[spot.lat, spot.lng]}
+ pathOptions={{
+ color: '#ffffff',
+ weight: 4,
+ fillColor: markerColor(spot.currentLevel),
+ fillOpacity: 0.96,
+ }}
+ radius={markerRadius(spot.currentLevel, true)}
+ className="surf-marker is-active"
+ >
+ <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
+ <strong>{spot.name}</strong>
+ <span>{levelLabel[spot.currentLevel]}</span>
+ </Tooltip>
+ </CircleMarker>
+ <DetailMapController spot={spot} />
+ </MapContainer>
+ </div>
+ </section>
+ {selectedNearbyPlace && activeTab === 'nearby' && (
+ <section className="section-card detail-section detail-nearby-detail" aria-label="장소 상세 정보">
+ <h3 className="detail-nearby-detail-title">{selectedNearbyPlace.title}</h3>
+ <dl className="detail-nearby-detail-list">
+ <div className="detail-nearby-detail-row">
+ <dt>유형</dt>
+ <dd>{selectedNearbyPlace.type}</dd>
+ </div>
+ <div className="detail-nearby-detail-row">
+ <dt>위치</dt>
+ <dd>{selectedNearbyPlace.address ?? `${spot.region} ${selectedNearbyPlace.title} 인근`}</dd>
+ </div>
+ <div className="detail-nearby-detail-row">
+ <dt>운영시간</dt>
+ <dd>{selectedNearbyPlace.operatingHours ?? '문의 필요'}</dd>
+ </div>
+ <div className="detail-nearby-detail-row">
+ <dt>거리</dt>
+ <dd>{selectedNearbyPlace.distance}</dd>
+ </div>
+ <div className="detail-nearby-detail-row detail-nearby-detail-desc">
+ <dt>설명</dt>
+ <dd>{selectedNearbyPlace.description}</dd>
+ </div>
+ </dl>
+ <p className="detail-nearby-detail-tag">
+ <span className="tag">{selectedNearbyPlace.tag}</span>
+ </p>
+ </section>
+ )}
+ </div>
+ </div>
+ </main>
+ )
+}
+
+
 function App() {
   const serviceKey = getSurfingApiKey()
+ const [screenMode, setScreenMode] = useState<ScreenMode>("dashboard")
   const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
   const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [selectedDate, setSelectedDate] = useState(today)
@@ -814,7 +1065,16 @@ function App() {
     handleSpotSelect(resolvedSpots[nextIndex].id)
   }
 
-  useEffect(() => {
+ 
+
+ const handleOpenSpotDetail = () => {
+ setScreenMode("spot-detail")
+ }
+
+ const handleCloseSpotDetail = () => {
+ setScreenMode("dashboard")
+ }
+ useEffect(() => {
     let cancelled = false
 
     fetch(countries10mUrl)
@@ -880,7 +1140,21 @@ function App() {
       <div className="background-aurora" />
       <div className="background-grid" />
 
-      <header className="topbar">
+      {screenMode === "spot-detail" ? (
+ <SpotDetailPage
+ spot={selectedSpot}
+ baseSpot={baseSpots.find((s) => s.id === selectedSpotId) ?? baseSpots[0]}
+ apiItems={apiItems}
+ southKoreaGeoJson={southKoreaGeoJson}
+ relativeDateLabel={relativeDateLabel}
+ absoluteDateLabel={absoluteDateLabel}
+ forecastLabel={forecastLabel}
+ sourceLabel={sourceLabel}
+ onBack={handleCloseSpotDetail}
+ />
+ ) : (
+ <>
+ <header className="topbar">
         <div>
           <p className="eyebrow">서핑 API 연동 대시보드</p>
           <h1>국립해양조사원 서핑지수를 날짜 네비게이션 UI와 함께 탐색합니다.</h1>
@@ -1142,8 +1416,16 @@ function App() {
               </div>
             </section>
           </aside>
+
+          <section className="section-card sidebar-detail-action" aria-label="상세 보기">
+            <button type="button" className="detail-link-button" onClick={handleOpenSpotDetail}>
+              상세 보기
+            </button>
+          </section>
         </div>
       </main>
+ </>
+ )}
     </div>
   )
 }
