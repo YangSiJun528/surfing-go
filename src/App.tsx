@@ -1111,7 +1111,6 @@ function SpotDetailPage({
 
  <section className="section-card detail-hero-card">
  <div className="detail-hero-copy">
- <p className="eyebrow">{spot.region} 포인트</p>
  <h1>{spot.name} 상세</h1>
  <p className="detail-hero-summary">{spot.summary}</p>
  <p className="detail-hero-spotlight">{spot.spotlight}</p>
@@ -1426,68 +1425,47 @@ function App() {
  />
  ) : (
  <>
- <header className="topbar">
+      <header className="topbar">
         <div>
-          <p className="eyebrow">서핑 API 연동 대시보드</p>
-          <h1>국립해양조사원 서핑지수를 날짜 네비게이션 UI와 함께 탐색합니다.</h1>
-          <p className="topbar-copy">{dataMessage}</p>
-        </div>
-        <div className="topbar-meta">
-          <div className="meta-pill">
-            <span className="meta-label">선택 날짜</span>
-            <strong>{absoluteDateLabel}</strong>
-            <span>{weekdayFormatter.format(selectedDate)} · {relativeDateLabel}</span>
-          </div>
-          <div className="meta-pill">
-            <span className="meta-label">예보 기준일</span>
-            <strong>{forecastLabel}</strong>
-          </div>
-          <div className="meta-pill">
-            <span className="meta-label">데이터 소스</span>
-            <strong>{sourceLabel}</strong>
-          </div>
-          <div className={`meta-pill level-pill ${levelClass(selectedSpot.currentLevel)}`}>
-            <span className="meta-label">선택 포인트</span>
-            <strong>{selectedSpot.name}</strong>
-          </div>
+          <h1>서핑고</h1>
         </div>
       </header>
 
       <main className="dashboard">
+        <section className="sidebar-date-nav section-card" aria-label="날짜 이동">
+          <button
+            type="button"
+            className="date-nav-button"
+            onClick={() => handleDateChange(-1)}
+            disabled={selectedDateOffset <= -DAY_RANGE}
+            aria-label={`이전 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, -1))}`}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+          <div className="date-nav-copy">
+            <span className="label">기준 날짜</span>
+            <strong className="date-nav-relative">{relativeDateLabel}</strong>
+            <span className="date-nav-absolute">{formatDateWithWeekday(selectedDate)}</span>
+          </div>
+          <button
+            type="button"
+            className="date-nav-button"
+            onClick={() => handleDateChange(1)}
+            disabled={selectedDateOffset >= DAY_RANGE}
+            aria-label={`다음 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, 1))}`}
+          >
+            <span aria-hidden="true">→</span>
+          </button>
+        </section>
+
         <section className="map-column">
           <div className="section-card map-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Leaflet 맵</p>
-                <h2>API 기준 한국 서핑 포인트 탐색</h2>
-              </div>
-              <p className="section-copy">API 예보가 있으면 선택 날짜에 우선 반영하고, 없으면 로컬 목업 조건으로 이어서 보여줍니다.</p>
-            </div>
+            <h2>API 기준 한국 서핑 포인트 탐색</h2>
+            <p className="section-copy">API 예보가 있으면 선택 날짜에 우선 반영하고, 없으면 로컬 목업 조건으로 이어서 보여줍니다.</p>
 
-            <div className="insight-strip">
-              <div>
-                <span className="label">선택한 포인트</span>
-                <strong>{selectedSpot.name}</strong>
-                <p className="condition-copy">{selectedSpot.current.weatherLabel}</p>
-                <p>{selectedSpot.spotlight}</p>
-              </div>
-              <div className="insight-metrics">
-                <div>
-                  <span className="label">파도 높이</span>
-                  <strong>{selectedSpot.current.waveHeight} m</strong>
-                </div>
-                <div>
-                  <span className="label">풍속</span>
-                  <strong>{selectedSpot.current.windSpeed} m/s</strong>
-                </div>
-                <div>
-                  <span className="label">추천 시간</span>
-                  <strong>{selectedSpot.current.recommendedTime}</strong>
-                </div>
-              </div>
-            </div>
-
-            <p className={`status-note ${dataStatus}`}>{dataMessage}</p>
+            {dataStatus !== 'ready' ? (
+              <p className={`status-note ${dataStatus}`}>{dataMessage}</p>
+            ) : null}
 
             <div className="map-stage">
               <div className="map-glow map-stage-glow" style={mapStyle} />
@@ -1556,37 +1534,10 @@ function App() {
         </section>
 
         <div className="sidebar-column">
-          <section className="sidebar-date-nav section-card" aria-label="날짜 이동">
-            <button
-              type="button"
-              className="date-nav-button"
-              onClick={() => handleDateChange(-1)}
-              disabled={selectedDateOffset <= -DAY_RANGE}
-              aria-label={`이전 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, -1))}`}
-            >
-              <span aria-hidden="true">←</span>
-            </button>
-            <div className="date-nav-copy">
-              <span className="label">기준 날짜</span>
-              <strong className="date-nav-relative">{relativeDateLabel}</strong>
-              <span className="date-nav-absolute">{formatDateWithWeekday(selectedDate)}</span>
-            </div>
-            <button
-              type="button"
-              className="date-nav-button"
-              onClick={() => handleDateChange(1)}
-              disabled={selectedDateOffset >= DAY_RANGE}
-              aria-label={`다음 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, 1))}`}
-            >
-              <span aria-hidden="true">→</span>
-            </button>
-          </section>
-
           <aside className="section-card sidebar">
             <section className="spot-nav-panel" aria-label="포인트 이동">
               <div className="spot-nav-head">
                 <div>
-                  <p className="eyebrow">{relativeDateLabel}의 포인트</p>
                   <h3>{selectedSpot.name}</h3>
                 </div>
                 <span className={`hero-level mini ${levelClass(selectedSpot.currentLevel)}`}>
@@ -1649,12 +1600,7 @@ function App() {
             </section>
 
             <section className="panel-section">
-              <div className="section-heading compact">
-                <div>
-                  <p className="eyebrow">{relativeDateLabel}의 판단</p>
-                  <h3>오늘의 파도</h3>
-                </div>
-              </div>
+              <h3>오늘의 파도</h3>
               <div className="wave-animation-slot" aria-label="파도 애니메이션 자리">
                 <WaveAnimation
                   waveHeight={selectedSpot.current.waveHeight}
@@ -1677,12 +1623,7 @@ function App() {
             </section>
 
             <section className="panel-section">
-              <div className="section-heading compact">
-                <div>
-                  <p className="eyebrow">현장 메모</p>
-                  <h3>특별 안내</h3>
-                </div>
-              </div>
+              <h3>특별 안내</h3>
               <div className="tag-list">
                 {selectedSpot.specialInfo.map((item) => (
                   <span key={item} className="tag">
