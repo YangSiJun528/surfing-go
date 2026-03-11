@@ -41,6 +41,7 @@ type SpotBase = {
   id: string
   name: string
   region: string
+  locationLabel: string
   placeCode: string | null
   lat: number
   lng: number
@@ -149,6 +150,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR1',
     name: '송정해수욕장',
     region: '부산',
+    locationLabel: '부산 해운대구',
     placeCode: 'SR1',
     lat: 35.1786125,
     lng: 129.1997133,
@@ -180,6 +182,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR3',
     name: '죽도해수욕장',
     region: '양양',
+    locationLabel: '강원 양양군',
     placeCode: 'SR3',
     lat: 37.975,
     lng: 128.7594444,
@@ -211,6 +214,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR4',
     name: '망상해수욕장',
     region: '동해',
+    locationLabel: '강원 동해시',
     placeCode: 'SR4',
     lat: 37.5922384,
     lng: 129.0896615,
@@ -242,6 +246,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR12',
     name: '금진해수욕장',
     region: '강릉',
+    locationLabel: '강원 강릉시',
     placeCode: 'SR12',
     lat: 37.6364817,
     lng: 129.0449615,
@@ -273,6 +278,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR7',
     name: '진하해수욕장',
     region: '울산',
+    locationLabel: '울산 울주군',
     placeCode: 'SR7',
     lat: 35.385,
     lng: 129.345,
@@ -304,6 +310,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR6',
     name: '다대포해수욕장',
     region: '부산',
+    locationLabel: '부산 사하구',
     placeCode: 'SR6',
     lat: 35.0469015,
     lng: 128.9662387,
@@ -335,6 +342,7 @@ const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCard
     id: 'SR10',
     name: '중문색달해수욕장',
     region: '제주',
+    locationLabel: '제주 서귀포시',
     placeCode: 'SR10',
     lat: 33.2451968,
     lng: 126.4111861,
@@ -1033,6 +1041,7 @@ function App() {
                       >
                         <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
                           <strong>{node.spot.name}</strong>
+                          <span>{node.spot.locationLabel}</span>
                           <span>{levelLabel[node.spot.currentLevel]}</span>
                         </Tooltip>
                       </CircleMarker>
