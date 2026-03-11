@@ -6,6 +6,7 @@ import type { CircleMarker as LeafletCircleMarker, LatLngBoundsExpression, LatLn
 import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
+import nearbyPlacesData from '../data/nearby-places.json'
 import {
   getSurfingApiKey,
   loadSurfingForecastData,
@@ -23,6 +24,42 @@ type LocalCard = {
   tag: string
   address?: string
   operatingHours?: string
+}
+
+type NearbyPlaceRecord = {
+  id: string
+  name: string
+  category: string
+  distanceLabel: string
+  distanceMeters: number
+  description: string
+  tag: string
+  lat: number
+  lng: number
+  googleMapsUrl: string
+  sourceLabel: string
+}
+
+type NearbyPlaceGroup = {
+  beach: {
+    id: string
+    name: string
+    region: string
+    placeCode: string | null
+    lat: number
+    lng: number
+    googleMapsUrl: string
+  }
+  nearbyPlaces: NearbyPlaceRecord[]
+}
+
+type NearbyPlace = LocalCard & {
+  id: string
+  category?: string
+  lat?: number
+  lng?: number
+  googleMapsUrl?: string
+  sourceLabel?: string
 }
 
 type SpotCurrent = {
@@ -109,6 +146,9 @@ const markerLegend = [
   { level: 'poor' as const, description: '현장 확인 후 보수적으로 판단해야 합니다.' },
   { level: 'flat' as const, description: '파도가 약해 대체 플랜을 같이 보는 편이 좋습니다.' },
 ]
+
+const nearbyPlaceGroups = nearbyPlacesData as NearbyPlaceGroup[]
+const nearbyPlacesByBeachId = new Map(nearbyPlaceGroups.map((group) => [group.beach.id, group.nearbyPlaces]))
 
 const metricInfo: Record<
   MetricKey,
@@ -489,6 +529,55 @@ function markerColor(level: SurfLevel) {
     case 'flat':
       return '#fc5f7f'
   }
+}
+
+function nearbyCategoryLabel(category: string) {
+  switch (category) {
+    case 'parking':
+      return '주차'
+    case 'surf_shop':
+      return '렌탈'
+    case 'restaurant':
+      return '식사'
+    default:
+      return '근처 장소'
+  }
+}
+
+function mergeNearbyPlaces(baseSpot: SpotBase): NearbyPlace[] {
+  const metadataByTitle = new Map(baseSpot.localPicks.map((place) => [place.title, place]))
+  const recordPlaces = nearbyPlacesByBeachId.get(baseSpot.id)
+
+  if (!recordPlaces?.length) {
+    return baseSpot.localPicks.map((place, index) => ({
+      ...place,
+      id: `${baseSpot.id}-fallback-${index}`,
+    }))
+  }
+
+  return recordPlaces.map((place) => {
+    const metadata = metadataByTitle.get(place.name)
+
+    return {
+      id: place.id,
+      title: place.name,
+      type: metadata?.type ?? nearbyCategoryLabel(place.category),
+      distance: place.distanceLabel,
+      description: place.description,
+      tag: place.tag,
+      address: metadata?.address,
+      operatingHours: metadata?.operatingHours,
+      category: place.category,
+      lat: place.lat,
+      lng: place.lng,
+      googleMapsUrl: place.googleMapsUrl,
+      sourceLabel: place.sourceLabel,
+    }
+  })
+}
+
+function hasNearbyPlaceCoordinates(place: NearbyPlace): place is NearbyPlace & { lat: number; lng: number } {
+  return typeof place.lat === 'number' && typeof place.lng === 'number'
 }
 
 function startOfDay(value: Date) {
@@ -967,15 +1056,71 @@ function SpotCircleMarker({
 
 const DETAIL_MAP_ZOOM = 11
 
-function DetailMapController({ spot }: { spot: ResolvedSpot }) {
+const DETAIL_NEARBY_MAP_ZOOM = 13
+
+function NearbyPlaceMarker({
+  place,
+  active,
+  onSelect,
+}: {
+  place: NearbyPlace & { lat: number; lng: number }
+  active: boolean
+  onSelect: (place: NearbyPlace) => void
+}) {
+  const markerRef = useRef<LeafletCircleMarker | null>(null)
+
+  useEffect(() => {
+    if (active) {
+      markerRef.current?.bringToFront()
+    }
+  }, [active, place.id])
+
+  return (
+    <CircleMarker
+      ref={markerRef}
+      center={[place.lat, place.lng]}
+      pathOptions={{
+        color: active ? '#10344a' : '#fff6d9',
+        weight: active ? 4 : 2,
+        fillColor: active ? '#ff9f43' : '#ffd166',
+        fillOpacity: active ? 0.98 : 0.9,
+      }}
+      radius={active ? 9 : 7}
+      eventHandlers={{ click: () => onSelect(place) }}
+      className={active ? 'nearby-marker is-active' : 'nearby-marker'}
+    >
+      <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
+        <strong>{place.title}</strong>
+        <span>{place.type}</span>
+        <span>{place.distance}</span>
+      </Tooltip>
+    </CircleMarker>
+  )
+}
+
+function DetailMapController({
+  spot,
+  selectedNearbyPlace,
+}: {
+  spot: ResolvedSpot
+  selectedNearbyPlace: NearbyPlace | null
+}) {
   const map = useMap()
 
   useEffect(() => {
+    if (selectedNearbyPlace && hasNearbyPlaceCoordinates(selectedNearbyPlace)) {
+      map.flyTo([selectedNearbyPlace.lat, selectedNearbyPlace.lng], DETAIL_NEARBY_MAP_ZOOM, {
+        animate: true,
+        duration: 0.8,
+      })
+      return
+    }
+
     map.flyTo([spot.lat, spot.lng], DETAIL_MAP_ZOOM, {
       animate: true,
       duration: 0.8,
     })
-  }, [map, spot.lat, spot.lng])
+  }, [map, selectedNearbyPlace, spot.lat, spot.lng])
 
   return null
 }
@@ -1153,7 +1298,8 @@ function SpotDetailPage({
  onBack: () => void
 }) {
  const [activeTab, setActiveTab] = useState<DetailTab>('weekly-forecast')
- const [selectedNearbyPlace, setSelectedNearbyPlace] = useState<LocalCard | null>(null)
+ const nearbyPlaces = useMemo(() => mergeNearbyPlaces(baseSpot), [baseSpot])
+ const [selectedNearbyPlace, setSelectedNearbyPlace] = useState<NearbyPlace | null>(null)
 
  const weekForecast = useMemo(() => {
    const spotIndex = baseSpots.findIndex((s) => s.id === baseSpot.id)
@@ -1170,6 +1316,12 @@ function SpotDetailPage({
      }
    })
  }, [baseSpot, apiItems])
+
+ useEffect(() => {
+   setSelectedNearbyPlace((current) => (
+     current && nearbyPlaces.some((place) => place.id === current.id) ? current : null
+   ))
+ }, [nearbyPlaces])
 
  return (
  <main className="detail-page">
@@ -1245,11 +1397,11 @@ function SpotDetailPage({
  )}
  {activeTab === 'nearby' && (
  <div className="nearby-place-list">
- {spot.localPicks.map((place) => (
+ {nearbyPlaces.map((place) => (
  <button
- key={place.title}
+ key={place.id}
  type="button"
- className={`nearby-place-card ${selectedNearbyPlace?.title === place.title ? 'is-selected' : ''}`}
+ className={`nearby-place-card ${selectedNearbyPlace?.id === place.id ? 'is-selected' : ''}`}
  onClick={() => setSelectedNearbyPlace(place)}
  >
  <span className="nearby-place-type">{place.type}</span>
@@ -1291,7 +1443,18 @@ function SpotDetailPage({
  />
  ) : null}
  <SpotCircleMarker spot={spot} active />
- <DetailMapController spot={spot} />
+ {nearbyPlaces.filter(hasNearbyPlaceCoordinates).map((place) => (
+ <NearbyPlaceMarker
+ key={place.id}
+ place={place}
+ active={selectedNearbyPlace?.id === place.id}
+ onSelect={(nextPlace) => {
+ setActiveTab('nearby')
+ setSelectedNearbyPlace(nextPlace)
+ }}
+ />
+ ))}
+ <DetailMapController spot={spot} selectedNearbyPlace={selectedNearbyPlace} />
  </MapContainer>
  </div>
  </section>
@@ -1315,6 +1478,12 @@ function SpotDetailPage({
  <dt>거리</dt>
  <dd>{selectedNearbyPlace.distance}</dd>
  </div>
+ {selectedNearbyPlace.sourceLabel ? (
+ <div className="detail-nearby-detail-row">
+ <dt>출처</dt>
+ <dd>{selectedNearbyPlace.sourceLabel}</dd>
+ </div>
+ ) : null}
  <div className="detail-nearby-detail-row detail-nearby-detail-desc">
  <dt>설명</dt>
  <dd>{selectedNearbyPlace.description}</dd>

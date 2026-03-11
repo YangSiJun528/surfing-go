@@ -478,6 +478,10 @@
   cursor: pointer;
 }
 
+.nearby-marker {
+  cursor: pointer;
+}
+
 .leaflet-interactive:focus {
   outline: none;
 }
