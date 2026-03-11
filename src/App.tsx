@@ -1460,9 +1460,6 @@ function App() {
 
         <section className="map-column">
           <div className="section-card map-card">
-            <h2>API 기준 한국 서핑 포인트 탐색</h2>
-            <p className="section-copy">API 예보가 있으면 선택 날짜에 우선 반영하고, 없으면 로컬 목업 조건으로 이어서 보여줍니다.</p>
-
             {dataStatus !== 'ready' ? (
               <p className={`status-note ${dataStatus}`}>{dataMessage}</p>
             ) : null}
