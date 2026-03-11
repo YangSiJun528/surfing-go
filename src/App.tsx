@@ -69,6 +69,7 @@ type ResolvedSpot = Omit<SpotBase, 'currentLevel' | 'heroWeather' | 'summary' | 
 type MarkerNode =
   | { kind: 'spot'; spot: ResolvedSpot }
   | { kind: 'cluster'; id: string; spots: ResolvedSpot[]; lat: number; lng: number; label: string }
+type MetricKey = 'waveHeight' | 'wavePeriod' | 'windSpeed' | 'waterTemp'
 
 const DAY_RANGE = 7
 const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
@@ -93,6 +94,54 @@ const skillLabel: Record<SkillLevel, string> = {
   beginner: '초급',
   intermediate: '중급',
   advanced: '상급',
+}
+
+const markerLegend = [
+  { level: 'very-good' as const, description: '가장 우선 체크할 메인 포인트입니다.' },
+  { level: 'good' as const, description: '조건이 안정적이라 실속 있는 선택지입니다.' },
+  { level: 'fair' as const, description: '시간대나 위치를 잘 고르면 무난합니다.' },
+  { level: 'poor' as const, description: '현장 확인 후 보수적으로 판단해야 합니다.' },
+  { level: 'flat' as const, description: '파도가 약해 대체 플랜을 같이 보는 편이 좋습니다.' },
+]
+
+const metricInfo: Record<
+  MetricKey,
+  {
+    label: string
+    unit: string
+    description: string
+    interpretation: string
+    formatValue: (spot: ResolvedSpot) => string
+  }
+> = {
+  waveHeight: {
+    label: '현재 파고',
+    unit: 'm',
+    description: '의미: 들어오는 파도의 평균 높이입니다.',
+    interpretation: '해석: 0.5m 이하는 약하고, 0.8~1.5m는 무난하며, 1.8m 이상은 난도가 올라갑니다.',
+    formatValue: (spot) => `${spot.current.waveHeight} m`,
+  },
+  wavePeriod: {
+    label: '파주기',
+    unit: 's',
+    description: '의미: 파도와 파도 사이의 시간 간격입니다.',
+    interpretation: '해석: 5초 이하는 짧고, 6~8초는 보통, 9초 이상은 더 힘 있는 세트일 수 있습니다.',
+    formatValue: (spot) => `${spot.current.wavePeriod} s`,
+  },
+  windSpeed: {
+    label: '풍속',
+    unit: 'm/s',
+    description: '의미: 바람의 속도이며 면 상태에 큰 영향을 줍니다.',
+    interpretation: '해석: 3m/s 이하는 잔잔하고, 4~6m/s는 체크 구간, 7m/s 이상은 강풍 대비가 필요합니다.',
+    formatValue: (spot) => `${spot.current.windSpeed} m/s`,
+  },
+  waterTemp: {
+    label: '수온',
+    unit: '°C',
+    description: '의미: 바다 물 온도로 체감과 슈트 선택에 직접 연결됩니다.',
+    interpretation: '해석: 10°C 전후는 매우 차갑고, 12~16°C는 두꺼운 슈트, 18°C 이상은 부담이 덜합니다.',
+    formatValue: (spot) => `${spot.current.waterTemp}°C`,
+  },
 }
 
 const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCardSeed[] }> = [
@@ -795,8 +844,6 @@ function App() {
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
   const [apiItems, setApiItems] = useState<SurfingApiItem[]>([])
-  const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
-  const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
 
   const selectedDateOffset = diffCalendarDays(selectedDate, today)
   const relativeDateLabel = formatRelativeDateLabel(selectedDate)
@@ -881,8 +928,6 @@ function App() {
         }
 
         setApiItems(result.items)
-        setDataStatus('ready')
-        setDataMessage(result.source === 'cache' ? '저장된 API 응답을 재사용했습니다.' : '실시간 API 응답을 반영했습니다.')
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -890,8 +935,7 @@ function App() {
         }
 
         setApiItems([])
-        setDataStatus('fallback')
-        setDataMessage(error instanceof Error ? `${error.message}. 데모 데이터로 전환했습니다.` : 'API 호출에 실패해 데모 데이터를 표시합니다.')
+        console.error(error)
       })
 
     return () => {
@@ -908,42 +952,38 @@ function App() {
         <h1>서핑고</h1>
       </header>
 
+      <div className="dashboard-top">
+        <div />
+        <section className="sidebar-date-nav section-card" aria-label="날짜 이동">
+          <button
+            type="button"
+            className="date-nav-button"
+            onClick={() => handleDateChange(-1)}
+            disabled={selectedDateOffset <= -DAY_RANGE}
+            aria-label={`이전 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, -1))}`}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+          <div className="date-nav-copy">
+            <span className="label">기준 날짜</span>
+            <strong className="date-nav-relative">{relativeDateLabel}</strong>
+            <span className="date-nav-absolute">{formatDateWithWeekday(selectedDate)}</span>
+          </div>
+          <button
+            type="button"
+            className="date-nav-button"
+            onClick={() => handleDateChange(1)}
+            disabled={selectedDateOffset >= DAY_RANGE}
+            aria-label={`다음 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, 1))}`}
+          >
+            <span aria-hidden="true">→</span>
+          </button>
+        </section>
+      </div>
+
       <main className="dashboard">
         <section className="map-column">
           <div className="section-card map-card">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Leaflet 맵</p>
-                <h2>API 기준 한국 서핑 포인트 탐색</h2>
-              </div>
-              <p className="section-copy">API 예보가 있으면 선택 날짜에 우선 반영하고, 없으면 로컬 목업 조건으로 이어서 보여줍니다.</p>
-            </div>
-
-            <div className="insight-strip">
-              <div>
-                <span className="label">선택한 포인트</span>
-                <strong>{selectedSpot.name}</strong>
-                <p className="condition-copy">{selectedSpot.current.weatherLabel}</p>
-                <p>{selectedSpot.spotlight}</p>
-              </div>
-              <div className="insight-metrics">
-                <div>
-                  <span className="label">파고</span>
-                  <strong>{selectedSpot.current.waveHeight} m</strong>
-                </div>
-                <div>
-                  <span className="label">풍속</span>
-                  <strong>{selectedSpot.current.windSpeed} m/s</strong>
-                </div>
-                <div>
-                  <span className="label">추천 시간</span>
-                  <strong>{selectedSpot.current.recommendedTime}</strong>
-                </div>
-              </div>
-            </div>
-
-            <p className={`status-note ${dataStatus}`}>{dataMessage}</p>
-
             <div className="map-stage">
               <div className="map-glow map-stage-glow" style={mapStyle} />
               <div className="weather-layer drizzle" />
@@ -1006,36 +1046,38 @@ function App() {
                 <SelectedSpotController spot={selectedSpot} />
               </MapContainer>
             </div>
+
+            <details className="map-legend" aria-label="마커 설명">
+              <summary className="map-legend-summary">
+                <div className="map-legend-head">
+                  <span className="label">마커 설명</span>
+                  <p>색상은 추천 정도, 원 크기는 상대적 우선순위를 의미합니다.</p>
+                </div>
+                <span className="map-legend-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="map-legend-list">
+                {markerLegend.map((item) => (
+                  <div key={item.level} className="map-legend-item">
+                    <span
+                      className={`map-legend-dot ${item.level}`}
+                      style={{
+                        width: `${markerRadius(item.level, false) * 2}px`,
+                        height: `${markerRadius(item.level, false) * 2}px`,
+                        backgroundColor: markerColor(item.level),
+                      }}
+                    />
+                    <div>
+                      <strong>{levelLabel[item.level]}</strong>
+                      <p>{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
           </div>
         </section>
 
         <div className="sidebar-column">
-          <section className="sidebar-date-nav section-card" aria-label="날짜 이동">
-            <button
-              type="button"
-              className="date-nav-button"
-              onClick={() => handleDateChange(-1)}
-              disabled={selectedDateOffset <= -DAY_RANGE}
-              aria-label={`이전 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, -1))}`}
-            >
-              <span aria-hidden="true">←</span>
-            </button>
-            <div className="date-nav-copy">
-              <span className="label">기준 날짜</span>
-              <strong className="date-nav-relative">{relativeDateLabel}</strong>
-              <span className="date-nav-absolute">{formatDateWithWeekday(selectedDate)}</span>
-            </div>
-            <button
-              type="button"
-              className="date-nav-button"
-              onClick={() => handleDateChange(1)}
-              disabled={selectedDateOffset >= DAY_RANGE}
-              aria-label={`다음 날짜 보기: ${formatDateWithWeekday(addDays(selectedDate, 1))}`}
-            >
-              <span aria-hidden="true">→</span>
-            </button>
-          </section>
-
           <aside className="section-card sidebar">
             <section className="spot-nav-panel" aria-label="포인트 이동">
               <div className="spot-nav-head">
@@ -1084,22 +1126,29 @@ function App() {
             <p className="hero-summary">{selectedSpot.summary}</p>
 
             <section className="panel-grid current-grid">
-              <div className="info-card">
-                <span className="label">현재 파고</span>
-                <strong>{selectedSpot.current.waveHeight} m</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">파주기</span>
-                <strong>{selectedSpot.current.wavePeriod} s</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">풍속</span>
-                <strong>{selectedSpot.current.windSpeed} m/s</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">수온</span>
-                <strong>{selectedSpot.current.waterTemp}°C</strong>
-              </div>
+              {(Object.entries(metricInfo) as Array<[MetricKey, (typeof metricInfo)[MetricKey]]>).map(([metricKey, info]) => {
+                return (
+                  <article key={metricKey} className="info-card">
+                    <div className="info-card-head">
+                      <span className="label">{info.label}</span>
+                      <span className="info-icon-wrap">
+                        <button
+                          type="button"
+                          className="info-icon-button"
+                          aria-label={`${info.label} 설명`}
+                        >
+                          i
+                        </button>
+                        <span className="info-card-tooltip" role="tooltip">
+                          <span>{info.description}</span>
+                          <span>{info.interpretation}</span>
+                        </span>
+                      </span>
+                    </div>
+                    <strong>{info.formatValue(selectedSpot)}</strong>
+                  </article>
+                )
+              })}
             </section>
 
             <section className="panel-section">
