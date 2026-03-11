@@ -16,6 +16,7 @@ import {
   type WeatherType,
 } from './lib/surfing'
 import { surfTipsBySpotId } from './lib/surfTips'
+import { getBeachLiveCam } from './lib/beachLiveCamCatalog'
 
 type LocalCard = {
   title: string
@@ -1392,6 +1393,7 @@ function SpotDetailPage({
  const nearbyPlaces = useMemo(() => mergeNearbyPlaces(baseSpot), [baseSpot])
  const [selectedNearbyPlace, setSelectedNearbyPlace] = useState<NearbyPlace | null>(null)
  const surfTipContent = surfTipsBySpotId[spot.id]
+ const liveCam = useMemo(() => getBeachLiveCam(spot.id, spot.name, spot.region), [spot.id, spot.name, spot.region])
 
  const weekForecast = useMemo(() => {
    const spotIndex = baseSpots.findIndex((s) => s.id === baseSpot.id)
@@ -1584,6 +1586,48 @@ function SpotDetailPage({
  </MapContainer>
  </div>
  </section>
+ {activeTab === 'weekly-forecast' && (
+ <section className="section-card detail-section detail-live-cam-card" aria-label="해안가 라이브 영상">
+ <div className="detail-live-cam-header">
+ <div>
+ <p className="label">Beach Live Cam</p>
+ <h3 className="detail-live-cam-title">{liveCam.title}</h3>
+ </div>
+ <span className="detail-live-cam-chip">{liveCam.matchLabel}</span>
+ </div>
+ {liveCam.previewUrl ? (
+ <div className="detail-live-cam-frame">
+ <iframe
+ src={liveCam.previewUrl}
+ title={`${spot.name} 해안 라이브`}
+ allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+ allowFullScreen
+ loading="lazy"
+ referrerPolicy="strict-origin-when-cross-origin"
+ />
+ </div>
+ ) : (
+ <div className="detail-live-cam-fallback">
+ <strong>임베드 가능한 공개 라이브가 없습니다.</strong>
+ <p>아래 링크로 YouTube 검색 결과를 바로 확인할 수 있습니다.</p>
+ </div>
+ )}
+ <div className="detail-live-cam-meta">
+ <span>{liveCam.areaLabel}</span>
+ <span>신뢰도 {liveCam.confidence}</span>
+ <span>{liveCam.provider}</span>
+ </div>
+ <p className="detail-live-cam-note">{liveCam.note}</p>
+ <div className="detail-live-cam-actions">
+ <a className="detail-live-cam-button primary" href={liveCam.watchUrl} target="_blank" rel="noreferrer">
+ 원본 열기
+ </a>
+ <a className="detail-live-cam-button" href={liveCam.searchUrl} target="_blank" rel="noreferrer">
+ YouTube 검색
+ </a>
+ </div>
+ </section>
+ )}
  {selectedNearbyPlace && activeTab === 'nearby' && (
  <section className="section-card detail-section detail-nearby-detail" aria-label="장소 상세 정보">
  <h3 className="detail-nearby-detail-title">{selectedNearbyPlace.title}</h3>
@@ -1636,9 +1680,7 @@ function App() {
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
   const [apiItems, setApiItems] = useState<SurfingApiItem[]>([])
   const [dataStatus, setDataStatus] = useState<'loading' | 'ready' | 'fallback'>(serviceKey ? 'loading' : 'fallback')
-  const [, setDataSource] = useState<'network' | 'cache' | 'demo'>('demo')
   const [dataMessage, setDataMessage] = useState(serviceKey ? 'API 설정을 확인하는 중입니다.' : 'API 키가 없어 데모 데이터를 표시합니다.')
-  const [, setForecastDate] = useState<string | null>(null)
 
   const selectedDateOffset = diffCalendarDays(selectedDate, today)
   const relativeDateLabel = formatRelativeDateLabel(selectedDate)
@@ -1734,8 +1776,6 @@ function App() {
 
         setApiItems(result.items)
         setDataStatus('ready')
-        setDataSource(result.source)
-        setForecastDate(result.items[0]?.predcYmd ?? null)
         setDataMessage(result.source === 'cache' ? '저장된 API 응답을 재사용했습니다.' : '실시간 API 응답을 반영했습니다.')
       })
       .catch((error: unknown) => {
@@ -1745,8 +1785,6 @@ function App() {
 
         setApiItems([])
         setDataStatus('fallback')
-        setDataSource('demo')
-        setForecastDate(null)
         setDataMessage(error instanceof Error ? `${error.message}. 데모 데이터로 전환했습니다.` : 'API 호출에 실패해 데모 데이터를 표시합니다.')
       })
 
