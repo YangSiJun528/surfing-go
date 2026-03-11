@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nearby Local Finder"
+  short_description: "Find nearby restaurants, parking, and surf shops"
+  default_prompt: "Use $nearby-local-finder to find restaurants, parking lots, and surf shops near a place with fixed search and comparison rules."
