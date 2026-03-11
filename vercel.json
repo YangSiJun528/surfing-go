@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/surfing",
+      "destination": "https://apis.data.go.kr/1192136/fcstSurfingv2/GetFcstSurfingApiServicev2"
+    }
+  ]
+}
