@@ -2,7 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperti
 import type { Feature, Geometry } from 'geojson'
 import { CircleMarker, GeoJSON, MapContainer, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet'
 import { divIcon } from 'leaflet'
-import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet'
+import type { CircleMarker as LeafletCircleMarker, LatLngBoundsExpression, LatLngExpression } from 'leaflet'
 import { feature as topojsonFeature } from 'topojson-client'
 import './App.css'
 import countries10mUrl from 'world-atlas/countries-10m.json?url'
@@ -920,6 +920,44 @@ function ClusterMarker({
   )
 }
 
+function SpotCircleMarker({
+  spot,
+  active,
+  onSelect,
+}: {
+  spot: ResolvedSpot
+  active: boolean
+  onSelect?: (spotId: string) => void
+}) {
+  const markerRef = useRef<LeafletCircleMarker | null>(null)
+
+  useEffect(() => {
+    markerRef.current?.bringToFront()
+  }, [spot.id, active])
+
+  return (
+    <CircleMarker
+      ref={markerRef}
+      center={[spot.lat, spot.lng]}
+      pathOptions={{
+        color: active ? '#ffffff' : '#f7fbff',
+        weight: active ? 4 : 3,
+        fillColor: markerColor(spot.currentLevel),
+        fillOpacity: 0.96,
+      }}
+      radius={markerRadius(spot.currentLevel, active)}
+      eventHandlers={onSelect ? { click: () => onSelect(spot.id) } : undefined}
+      className={active ? 'surf-marker is-active' : 'surf-marker'}
+    >
+      <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
+        <strong>{spot.name}</strong>
+        {onSelect ? <span>{spot.locationLabel}</span> : null}
+        <span>{levelLabel[spot.currentLevel]}</span>
+      </Tooltip>
+    </CircleMarker>
+  )
+}
+
 const DETAIL_MAP_ZOOM = 11
 
 function DetailMapController({ spot }: { spot: ResolvedSpot }) {
@@ -1262,22 +1300,7 @@ function SpotDetailPage({
  })}
  />
  ) : null}
- <CircleMarker
- center={[spot.lat, spot.lng]}
- pathOptions={{
- color: '#ffffff',
- weight: 4,
- fillColor: markerColor(spot.currentLevel),
- fillOpacity: 0.96,
- }}
- radius={markerRadius(spot.currentLevel, true)}
- className="surf-marker is-active"
- >
- <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
- <strong>{spot.name}</strong>
- <span>{levelLabel[spot.currentLevel]}</span>
- </Tooltip>
- </CircleMarker>
+ <SpotCircleMarker spot={spot} active />
  <DetailMapController spot={spot} />
  </MapContainer>
  </div>
@@ -1540,27 +1563,12 @@ function App() {
                   if (node.kind === 'spot') {
                     const active = node.spot.id === selectedSpot.id
                     return (
-                      <CircleMarker
+                      <SpotCircleMarker
                         key={node.spot.id}
-                        center={[node.spot.lat, node.spot.lng]}
-                        pathOptions={{
-                          color: active ? '#ffffff' : '#f7fbff',
-                          weight: active ? 4 : 3,
-                          fillColor: markerColor(node.spot.currentLevel),
-                          fillOpacity: 0.96,
-                        }}
-                        radius={markerRadius(node.spot.currentLevel, active)}
-                        eventHandlers={{
-                          click: () => handleSpotSelect(node.spot.id),
-                        }}
-                        className={active ? 'surf-marker is-active' : 'surf-marker'}
-                      >
-                        <Tooltip direction="top" offset={[0, -10]} opacity={1} className="surf-tooltip">
-                          <strong>{node.spot.name}</strong>
-                          <span>{node.spot.locationLabel}</span>
-                          <span>{levelLabel[node.spot.currentLevel]}</span>
-                        </Tooltip>
-                      </CircleMarker>
+                        spot={node.spot}
+                        active={active}
+                        onSelect={handleSpotSelect}
+                      />
                     )
                   }
 
