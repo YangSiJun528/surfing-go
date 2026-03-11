@@ -290,10 +290,6 @@
   background: rgba(255, 255, 255, 0.55);
 }
 
-.status-note.ready {
-  border-color: rgba(77, 225, 209, 0.45);
-}
-
 .status-note.loading {
   border-color: rgba(88, 182, 255, 0.45);
 }
@@ -427,12 +423,24 @@
   filter: drop-shadow(0 14px 22px rgba(113, 152, 180, 0.18));
 }
 
-.surf-marker {
-  cursor: pointer;
-}
-
 .leaflet-interactive:focus {
   outline: none;
+}
+
+.spot-marker-wrapper {
+  background: transparent;
+  border: 0;
+}
+
+.spot-marker {
+  border: 3px solid #f7fbff;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(54, 130, 173, 0.28);
+}
+
+.spot-marker.is-active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.35), 0 12px 28px rgba(54, 130, 173, 0.34);
 }
 
 .cluster-icon-wrapper {
@@ -519,6 +527,60 @@
 
 .panel-section {
   margin-top: 1.2rem;
+}
+
+.wave-animation-slot {
+  margin-bottom: 0.85rem;
+  padding: 0.9rem;
+  border: 1px dashed rgba(85, 142, 181, 0.28);
+  border-radius: 1.2rem;
+  background:
+    linear-gradient(180deg, rgba(230, 246, 255, 0.88), rgba(243, 251, 255, 0.9)),
+    radial-gradient(circle at top left, rgba(88, 182, 255, 0.12), transparent 40%);
+}
+
+.wave-animation-shell {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.wave-animation-canvas {
+  display: block;
+  width: 100%;
+  height: 8.25rem;
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(237, 249, 255, 0.92) 0%, rgba(206, 236, 253, 0.95) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.wave-animation-meta {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.wave-animation-meta span {
+  padding: 0.42rem 0.7rem;
+  border: 1px solid rgba(85, 142, 181, 0.16);
+  border-radius: 999px;
+  font-size: 0.84rem;
+  color: var(--text);
+  background: rgba(231, 244, 251, 0.78);
+}
+
+.wave-reading-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.wave-reading-item {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.wave-reading-item strong {
+  color: var(--text);
 }
 
 .segment-control {
