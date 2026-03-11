@@ -69,6 +69,7 @@ type ResolvedSpot = Omit<SpotBase, 'currentLevel' | 'heroWeather' | 'summary' | 
 type MarkerNode =
   | { kind: 'spot'; spot: ResolvedSpot }
   | { kind: 'cluster'; id: string; spots: ResolvedSpot[]; lat: number; lng: number; label: string }
+type MetricKey = 'waveHeight' | 'wavePeriod' | 'windSpeed' | 'waterTemp'
 
 const DAY_RANGE = 7
 const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
@@ -93,6 +94,46 @@ const skillLabel: Record<SkillLevel, string> = {
   beginner: '초급',
   intermediate: '중급',
   advanced: '상급',
+}
+
+const metricInfo: Record<
+  MetricKey,
+  {
+    label: string
+    unit: string
+    description: string
+    interpretation: string
+    formatValue: (spot: ResolvedSpot) => string
+  }
+> = {
+  waveHeight: {
+    label: '현재 파고',
+    unit: 'm',
+    description: '의미: 들어오는 파도의 평균 높이입니다.',
+    interpretation: '해석: 0.5m 이하는 약하고, 0.8~1.5m는 무난하며, 1.8m 이상은 난도가 올라갑니다.',
+    formatValue: (spot) => `${spot.current.waveHeight} m`,
+  },
+  wavePeriod: {
+    label: '파주기',
+    unit: 's',
+    description: '의미: 파도와 파도 사이의 시간 간격입니다.',
+    interpretation: '해석: 5초 이하는 짧고, 6~8초는 보통, 9초 이상은 더 힘 있는 세트일 수 있습니다.',
+    formatValue: (spot) => `${spot.current.wavePeriod} s`,
+  },
+  windSpeed: {
+    label: '풍속',
+    unit: 'm/s',
+    description: '의미: 바람의 속도이며 면 상태에 큰 영향을 줍니다.',
+    interpretation: '해석: 3m/s 이하는 잔잔하고, 4~6m/s는 체크 구간, 7m/s 이상은 강풍 대비가 필요합니다.',
+    formatValue: (spot) => `${spot.current.windSpeed} m/s`,
+  },
+  waterTemp: {
+    label: '수온',
+    unit: '°C',
+    description: '의미: 바다 물 온도로 체감과 슈트 선택에 직접 연결됩니다.',
+    interpretation: '해석: 10°C 전후는 매우 차갑고, 12~16°C는 두꺼운 슈트, 18°C 이상은 부담이 덜합니다.',
+    formatValue: (spot) => `${spot.current.waterTemp}°C`,
+  },
 }
 
 const rawBaseSpots: Array<Omit<SpotBase, 'localPicks'> & { localPicks: LocalCardSeed[] }> = [
@@ -1084,22 +1125,29 @@ function App() {
             <p className="hero-summary">{selectedSpot.summary}</p>
 
             <section className="panel-grid current-grid">
-              <div className="info-card">
-                <span className="label">현재 파고</span>
-                <strong>{selectedSpot.current.waveHeight} m</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">파주기</span>
-                <strong>{selectedSpot.current.wavePeriod} s</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">풍속</span>
-                <strong>{selectedSpot.current.windSpeed} m/s</strong>
-              </div>
-              <div className="info-card">
-                <span className="label">수온</span>
-                <strong>{selectedSpot.current.waterTemp}°C</strong>
-              </div>
+              {(Object.entries(metricInfo) as Array<[MetricKey, (typeof metricInfo)[MetricKey]]>).map(([metricKey, info]) => {
+                return (
+                  <article key={metricKey} className="info-card">
+                    <div className="info-card-head">
+                      <span className="label">{info.label}</span>
+                      <span className="info-icon-wrap">
+                        <button
+                          type="button"
+                          className="info-icon-button"
+                          aria-label={`${info.label} 설명`}
+                        >
+                          i
+                        </button>
+                        <span className="info-card-tooltip" role="tooltip">
+                          <span>{info.description}</span>
+                          <span>{info.interpretation}</span>
+                        </span>
+                      </span>
+                    </div>
+                    <strong>{info.formatValue(selectedSpot)}</strong>
+                  </article>
+                )
+              })}
             </section>
 
             <section className="panel-section">
