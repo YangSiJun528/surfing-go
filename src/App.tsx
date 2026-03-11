@@ -77,6 +77,7 @@ type WaveReadingEntry = {
 }
 
 const DAY_RANGE = 7
+const skillLevels: SkillLevel[] = ['beginner', 'intermediate', 'advanced']
 const weatherTypes: WeatherType[] = ['sunny', 'cloudy', 'windy', 'rainy']
 const mapCenter: LatLngExpression = [36.2, 127.9]
 const koreaMaxBounds: LatLngBoundsExpression = [
@@ -93,6 +94,12 @@ const levelLabel: Record<SurfLevel, string> = {
   fair: '보통',
   poor: '주의',
   flat: '비추천',
+}
+
+const skillLabel: Record<SkillLevel, string> = {
+  beginner: '초급',
+  intermediate: '중급',
+  advanced: '상급',
 }
 
 const markerLegend = [
@@ -1097,8 +1104,6 @@ function SpotDetailPage({
  southKoreaGeoJson,
  relativeDateLabel,
  absoluteDateLabel,
- forecastLabel,
- sourceLabel,
  onBack,
 }: {
  spot: ResolvedSpot
@@ -1107,8 +1112,6 @@ function SpotDetailPage({
  southKoreaGeoJson: Feature<Geometry, { name?: string }> | null
  relativeDateLabel: string
  absoluteDateLabel: string
- forecastLabel: string
- sourceLabel: string
  onBack: () => void
 }) {
  const [activeTab, setActiveTab] = useState<DetailTab>('weekly-forecast')
@@ -1142,14 +1145,6 @@ function SpotDetailPage({
  <strong>{absoluteDateLabel}</strong>
  <span>{relativeDateLabel}</span>
  </div>
- <div className="meta-pill">
- <span className="meta-label">예보 기준일</span>
- <strong>{forecastLabel}</strong>
- </div>
- <div className="meta-pill">
- <span className="meta-label">데이터 소스</span>
- <strong>{sourceLabel}</strong>
- </div>
  </div>
  </section>
 
@@ -1161,11 +1156,6 @@ function SpotDetailPage({
  </div>
  <div className="detail-hero-side">
  <span className={"hero-level " + levelClass(spot.currentLevel)}>{levelLabel[spot.currentLevel]}</span>
- <div className="detail-coordinate-card">
- <span className="label">위치 코드</span>
- <strong>{spot.placeCode ? spot.region + " · " + spot.placeCode : spot.region + " · 코드 미확인"}</strong>
- <span>위도 {spot.lat.toFixed(3)} · 경도 {spot.lng.toFixed(3)}</span>
- </div>
  </div>
  </section>
 
@@ -1323,6 +1313,7 @@ function App() {
   const serviceKey = getSurfingApiKey()
  const [screenMode, setScreenMode] = useState<ScreenMode>("dashboard")
   const [selectedSpotId, setSelectedSpotId] = useState(baseSpots[0].id)
+  const [selectedSkill, setSelectedSkill] = useState<SkillLevel>('beginner')
   const [selectedDate, setSelectedDate] = useState(today)
   const [mapZoom, setMapZoom] = useState(7)
   const [southKoreaGeoJson, setSouthKoreaGeoJson] = useState<Feature<Geometry, { name?: string }> | null>(null)
@@ -1463,8 +1454,6 @@ function App() {
  southKoreaGeoJson={southKoreaGeoJson}
  relativeDateLabel={relativeDateLabel}
  absoluteDateLabel={absoluteDateLabel}
- forecastLabel={forecastLabel}
- sourceLabel={sourceLabel}
  onBack={handleCloseSpotDetail}
  />
  ) : (
@@ -1680,6 +1669,22 @@ function App() {
                   waveHeight={selectedSpot.current.waveHeight}
                   wavePeriod={selectedSpot.current.wavePeriod}
                 />
+              </div>
+              <div className="segment-control" role="tablist" aria-label="실력 레벨 선택">
+                {skillLevels.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={selectedSkill === level ? 'is-selected' : ''}
+                    onClick={() => setSelectedSkill(level)}
+                  >
+                    {skillLabel[level]}
+                  </button>
+                ))}
+              </div>
+              <div className="narrative-card">
+                <span className="label">{relativeDateLabel}의 해석</span>
+                <p>{selectedSpot.skillNotes[selectedSkill]}</p>
               </div>
               <div className="narrative-card">
                 <span className="label">오늘의 파도 읽기</span>
